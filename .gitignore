@@ -216,3 +216,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+*.pyc
+# Export codebase artifacts
+codeexport.config.psd1
+codebase.txt
+exported_cb/
