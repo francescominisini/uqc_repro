@@ -3,8 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 # Keep Torch CPU-only and single-threaded in this environment.
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
@@ -17,7 +16,7 @@ import numpy as np
 import torch
 
 from uqc.env import EnvConfig, QuantumControlEnv
-from uqc.eval import ControlPlan
+from uqc.eval import ControlPlan, robustness_metrics
 from uqc.physics import GmonSystem, GmonSystemConfig, UFOCostWeights
 from uqc.parallel import ParallelBatchCollector
 from uqc.trpo import TRPOAgent, TRPOConfig
@@ -31,8 +30,11 @@ except RuntimeError:
     pass
 
 
-
-def collect_batch(env: QuantumControlEnv, agent: TRPOAgent, episodes_per_batch: int) -> Tuple[List[Dict[str, object]], List[Dict[str, float]]]:
+def collect_batch(
+    env: QuantumControlEnv,
+    agent: TRPOAgent,
+    episodes_per_batch: int,
+) -> Tuple[List[Dict[str, object]], List[Dict[str, float]]]:
     transitions: List[Dict[str, object]] = []
     finals: List[Dict[str, float]] = []
     for _ in range(episodes_per_batch):
@@ -50,7 +52,6 @@ def collect_batch(env: QuantumControlEnv, agent: TRPOAgent, episodes_per_batch: 
     return transitions, finals
 
 
-
 def summarize_final_infos(finals: List[Dict[str, float]]) -> Dict[str, float]:
     if not finals:
         return {
@@ -62,12 +63,11 @@ def summarize_final_infos(finals: List[Dict[str, float]]) -> Dict[str, float]:
             "avg_time_cost": float("nan"),
         }
     keys = ["cost", "fidelity", "leakage", "time_ns", "boundary_cost", "time_cost"]
-    out = {}
+    out: Dict[str, float] = {}
     for key in keys:
         vals = [float(info.get(key, np.nan)) for info in finals]
         out[f"avg_{key}"] = float(np.nanmean(vals))
     return out
-
 
 
 def evaluate(agent: TRPOAgent, env: QuantumControlEnv) -> Dict[str, object]:
@@ -80,8 +80,14 @@ def evaluate(agent: TRPOAgent, env: QuantumControlEnv) -> Dict[str, object]:
     return final
 
 
-
-def _checkpoint_payload(agent: TRPOAgent, *, iteration: int, alpha: float, gamma: float, note: str = "") -> Dict[str, object]:
+def _checkpoint_payload(
+    agent: TRPOAgent,
+    *,
+    iteration: int,
+    alpha: float,
+    gamma: float,
+    note: str = "",
+) -> Dict[str, object]:
     return {
         "agent_state": agent.state_dict(),
         "iteration": int(iteration),
@@ -91,11 +97,17 @@ def _checkpoint_payload(agent: TRPOAgent, *, iteration: int, alpha: float, gamma
     }
 
 
-
-def save_checkpoint(agent: TRPOAgent, path: str, *, iteration: int, alpha: float, gamma: float, note: str = "") -> None:
+def save_checkpoint(
+    agent: TRPOAgent,
+    path: str,
+    *,
+    iteration: int,
+    alpha: float,
+    gamma: float,
+    note: str = "",
+) -> None:
     ensure_dir(os.path.dirname(path) or ".")
     torch.save(_checkpoint_payload(agent, iteration=iteration, alpha=alpha, gamma=gamma, note=note), path)
-
 
 
 def load_checkpoint_into_agent(agent: TRPOAgent, checkpoint_path: str) -> Dict[str, object]:
@@ -107,7 +119,6 @@ def load_checkpoint_into_agent(agent: TRPOAgent, checkpoint_path: str) -> Dict[s
         agent.load_state_dict(state)
         return {"agent_state": state}
     raise ValueError(f"Unsupported checkpoint format: {checkpoint_path}")
-
 
 
 def save_eval_plan(
@@ -132,6 +143,83 @@ def save_eval_plan(
     )
     plan.save(path)
 
+
+def parse_float_csv(text: str) -> List[float]:
+    text = (text or "").strip()
+    if not text:
+        return []
+    return [float(x.strip()) for x in text.split(",") if x.strip()]
+
+
+def sigma_tag(sigma: float) -> str:
+    return str(float(sigma)).replace("-", "m").replace(".", "p")
+
+
+def build_control_plan(
+    eval_info: Dict[str, object],
+    *,
+    alpha: float,
+    gamma: float,
+    dt_ns: float,
+    runtime_norm_ns: float,
+    weights: UFOCostWeights,
+    note: str,
+) -> ControlPlan:
+    return ControlPlan(
+        controls_mhz_and_phase=np.asarray(eval_info["nominal_controls"], dtype=np.float64),
+        target_alpha=float(alpha),
+        target_gamma=float(gamma),
+        dt_ns=float(dt_ns),
+        runtime_norm_ns=float(runtime_norm_ns),
+        cost_weights=weights,
+        note=note,
+    )
+
+
+def compute_robustness_suite(
+    system: GmonSystem,
+    plan: ControlPlan,
+    *,
+    sigmas_mhz: List[float],
+    num_samples: int,
+    base_seed: int,
+) -> Dict[str, Dict[str, float | int]]:
+    out: Dict[str, Dict[str, float | int]] = {}
+    for idx, sigma in enumerate(sigmas_mhz):
+        tag = f"sigma_{sigma_tag(sigma)}"
+        metrics = robustness_metrics(
+            system=system,
+            plan=plan,
+            sigma_mhz=float(sigma),
+            num_samples=int(num_samples),
+            seed=int(base_seed + idx),
+        )
+        out[tag] = {
+            "sigma_mhz": float(metrics["sigma_mhz"]),
+            "num_samples": int(metrics["num_samples"]),
+            "average_fidelity": float(metrics["average_fidelity"]),
+            "average_gate_fidelity": float(metrics["average_gate_fidelity"]),
+            "fidelity_variance": float(metrics["fidelity_variance"]),
+        }
+    return out
+
+
+def flatten_robustness_for_log(
+    robustness: Dict[str, Dict[str, float | int]],
+) -> Dict[str, float]:
+    flat: Dict[str, float] = {}
+    for sigma_key, metrics in robustness.items():
+        for metric_name in ("average_fidelity", "average_gate_fidelity", "fidelity_variance"):
+            value = metrics.get(metric_name)
+            if value is not None:
+                flat[f"robustness_{sigma_key}_{metric_name}"] = float(value)
+    return flat
+
+
+def save_json(path: str, payload: Dict[str, Any]) -> None:
+    ensure_dir(os.path.dirname(path) or ".")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, sort_keys=True)
 
 
 def main() -> None:
@@ -162,18 +250,33 @@ def main() -> None:
     parser.add_argument("--init-checkpoint", type=str, default=None, help="Optional checkpoint to initialize or resume from.")
     parser.add_argument("--num-workers", type=int, default=1, help="Parallel rollout workers for batch collection.")
     parser.add_argument("--episodes-per-task", type=int, default=0, help="Episodes per worker task; 0 chooses automatically.")
+    parser.add_argument(
+        "--robustness-sigmas",
+        type=str,
+        default="1.0",
+        help="Comma-separated sigma values in MHz for robustness eval, e.g. '0.5,1.0,2.0'. Empty string disables robustness eval.",
+    )
+    parser.add_argument(
+        "--robustness-samples",
+        type=int,
+        default=60,
+        help="Monte Carlo samples per robustness evaluation.",
+    )
     parser.add_argument("--out", type=str, required=True)
     args = parser.parse_args()
 
     alpha = parse_angle_expr(args.alpha)
     gamma = parse_angle_expr(args.gamma)
+    robustness_sigmas = parse_float_csv(args.robustness_sigmas)
     set_seeds(args.seed)
     ensure_dir(args.out)
     logger = JsonlLogger(os.path.join(args.out, "training_log.jsonl"))
     checkpoints_dir = os.path.join(args.out, "checkpoints")
     plans_dir = os.path.join(args.out, "plans")
+    robustness_dir = os.path.join(args.out, "robustness")
     ensure_dir(checkpoints_dir)
     ensure_dir(plans_dir)
+    ensure_dir(robustness_dir)
 
     system = GmonSystem(
         GmonSystemConfig(
@@ -233,10 +336,11 @@ def main() -> None:
         init_meta = load_checkpoint_into_agent(agent, args.init_checkpoint)
 
     best_eval_cost = float("inf")
-    best_eval = None
+    best_eval: Dict[str, object] | None = None
     best_plan_path = os.path.join(args.out, "best_control_plan.npz")
     best_ckpt_path = os.path.join(args.out, "best_agent.pt")
     last_eval_info: Dict[str, object] | None = None
+    last_robustness_path: str | None = None
 
     collector = ParallelBatchCollector(
         system_config=system.config,
@@ -253,6 +357,7 @@ def main() -> None:
                 transitions, finals = collector.collect(agent, args.episodes_per_batch)
             else:
                 transitions, finals = collect_batch(train_env, agent, args.episodes_per_batch)
+
             update_info = agent.update(transitions)
             train_stats = summarize_final_infos(finals)
 
@@ -263,10 +368,10 @@ def main() -> None:
             else:
                 iter_ckpt_path = ""
 
-            record = {
-                "iteration": iteration,
-                "alpha": alpha,
-                "gamma": gamma,
+            record: Dict[str, Any] = {
+                "iteration": int(iteration),
+                "alpha": float(alpha),
+                "gamma": float(gamma),
                 "num_workers": int(args.num_workers),
                 **train_stats,
                 **{f"update_{k}": float(v) for k, v in update_info.items()},
@@ -277,6 +382,7 @@ def main() -> None:
             if iteration % args.eval_every == 0:
                 eval_info = evaluate(agent, eval_env)
                 last_eval_info = eval_info
+
                 iter_plan_path = os.path.join(plans_dir, f"iter_{iteration:06d}_control_plan.npz")
                 save_eval_plan(
                     eval_info,
@@ -288,6 +394,7 @@ def main() -> None:
                     path=iter_plan_path,
                     note=f"TRPO single target iteration {iteration}",
                 )
+
                 record.update(
                     {
                         "eval_cost": float(eval_info["cost"]),
@@ -297,6 +404,44 @@ def main() -> None:
                         "eval_plan_path": iter_plan_path,
                     }
                 )
+
+                if robustness_sigmas:
+                    iter_plan = build_control_plan(
+                        eval_info,
+                        alpha=alpha,
+                        gamma=gamma,
+                        dt_ns=args.dt_ns,
+                        runtime_norm_ns=args.runtime_norm_ns,
+                        weights=weights,
+                        note=f"TRPO single target iteration {iteration}",
+                    )
+                    robustness = compute_robustness_suite(
+                        system=system,
+                        plan=iter_plan,
+                        sigmas_mhz=robustness_sigmas,
+                        num_samples=args.robustness_samples,
+                        base_seed=args.seed + 10000 * iteration,
+                    )
+
+                    iter_robustness_path = os.path.join(robustness_dir, f"iter_{iteration:06d}_robustness.json")
+                    robustness_payload: Dict[str, Any] = {
+                        "iteration": int(iteration),
+                        "alpha": float(alpha),
+                        "gamma": float(gamma),
+                        "eval_cost": float(eval_info["cost"]),
+                        "eval_fidelity": float(eval_info["fidelity"]),
+                        "eval_leakage": float(eval_info["leakage"]),
+                        "eval_time_ns": float(eval_info["time_ns"]),
+                        "eval_plan_path": iter_plan_path,
+                        "robustness": robustness,
+                    }
+                    save_json(iter_robustness_path, robustness_payload)
+                    last_robustness_path = iter_robustness_path
+
+                    record["robustness"] = robustness
+                    record["robustness_path"] = iter_robustness_path
+                    record.update(flatten_robustness_for_log(robustness))
+
                 if float(eval_info["cost"]) < best_eval_cost:
                     best_eval_cost = float(eval_info["cost"])
                     best_eval = eval_info
@@ -310,13 +455,27 @@ def main() -> None:
                         path=best_plan_path,
                         note=f"TRPO single target best at iteration {iteration}",
                     )
-                    save_checkpoint(agent, best_ckpt_path, iteration=iteration, alpha=alpha, gamma=gamma, note="best single-target agent")
+                    save_checkpoint(
+                        agent,
+                        best_ckpt_path,
+                        iteration=iteration,
+                        alpha=alpha,
+                        gamma=gamma,
+                        note="best single-target agent",
+                    )
 
             logger.write(record)
             print(json.dumps(record), flush=True)
 
     final_ckpt_path = os.path.join(args.out, "final_agent.pt")
-    save_checkpoint(agent, final_ckpt_path, iteration=args.iterations, alpha=alpha, gamma=gamma, note="final single-target agent")
+    save_checkpoint(
+        agent,
+        final_ckpt_path,
+        iteration=args.iterations,
+        alpha=alpha,
+        gamma=gamma,
+        note="final single-target agent",
+    )
 
     final_plan_path = None
     if last_eval_info is not None:
@@ -332,11 +491,11 @@ def main() -> None:
             note="final single-target deterministic rollout",
         )
 
-    summary = {
-        "alpha": alpha,
-        "gamma": gamma,
+    summary: Dict[str, Any] = {
+        "alpha": float(alpha),
+        "gamma": float(gamma),
         "noise_optimized": bool(args.noise_optimized),
-        "best_eval_cost": best_eval_cost,
+        "best_eval_cost": float(best_eval_cost),
         "best_plan_path": best_plan_path if os.path.exists(best_plan_path) else None,
         "best_ckpt_path": best_ckpt_path if os.path.exists(best_ckpt_path) else None,
         "final_ckpt_path": final_ckpt_path if os.path.exists(final_ckpt_path) else None,
@@ -344,9 +503,15 @@ def main() -> None:
         "iterations": int(args.iterations),
         "episodes_per_batch": int(args.episodes_per_batch),
         "init_checkpoint": args.init_checkpoint,
+        "robustness_sigmas": robustness_sigmas,
+        "robustness_samples": int(args.robustness_samples),
+        "last_robustness_path": last_robustness_path if last_robustness_path and os.path.exists(last_robustness_path) else None,
     }
+
     if init_meta is not None:
-        summary["init_checkpoint_iteration"] = int(init_meta.get("iteration", -1)) if isinstance(init_meta.get("iteration", -1), (int, float)) else None
+        raw_iter = init_meta.get("iteration", -1)
+        summary["init_checkpoint_iteration"] = int(raw_iter) if isinstance(raw_iter, (int, float)) else None
+
     if best_eval is not None:
         summary.update(
             {
@@ -355,6 +520,7 @@ def main() -> None:
                 "best_eval_time_ns": float(best_eval["time_ns"]),
             }
         )
+
     with open(os.path.join(args.out, "summary.json"), "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2, sort_keys=True)
 
