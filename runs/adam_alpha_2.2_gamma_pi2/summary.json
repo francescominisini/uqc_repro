@@ -1,0 +1,11 @@
+{
+  "alpha": 2.2,
+  "best_horizon_ns": 90.0,
+  "gamma": 1.5707963267948966,
+  "nominal_cost": 0.15468058075308586,
+  "nominal_fidelity": 0.9996513290322417,
+  "nominal_leakage": 9.58938039857979e-05,
+  "nominal_time_ns": 90.0,
+  "objective_cost": 0.1546805807529593,
+  "plan_path": "runs/adam_alpha_2.2_gamma_pi2\\best_control_plan.npz"
+}

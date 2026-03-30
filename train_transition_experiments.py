@@ -341,67 +341,36 @@ def main() -> None:
             with collector:
                 for iteration in range(1, args.iterations + 1):
                     transitions, finals = (collector.collect(agent, args.episodes_per_batch) if args.num_workers > 1 else collect_batch(train_env, agent, args.episodes_per_batch))
-                update_info = agent.update(transitions)
-                train_stats = summarize_final_infos(finals)
-                record = {
-                    "source_label": source.label,
-                    "source_checkpoint": source.checkpoint,
-                    "target_alpha": target.alpha,
-                    "target_gamma": target.gamma,
-                    "iteration": iteration,
-                    "num_workers": int(args.num_workers),
-                    **train_stats,
-                    **{f"update_{k}": float(v) for k, v in update_info.items()},
-                }
+                    update_info = agent.update(transitions)
+                    train_stats = summarize_final_infos(finals)
+                    record = {
+                        "source_label": source.label,
+                        "source_checkpoint": source.checkpoint,
+                        "target_alpha": target.alpha,
+                        "target_gamma": target.gamma,
+                        "iteration": iteration,
+                        "num_workers": int(args.num_workers),
+                        **train_stats,
+                        **{f"update_{k}": float(v) for k, v in update_info.items()},
+                    }
 
-                iter_ckpt_path = os.path.join(ckpt_dir, f"iter_{iteration:06d}.pt")
-                if args.save_every > 0 and (iteration % args.save_every == 0 or iteration == args.iterations):
-                    save_checkpoint(
-                        agent,
-                        iter_ckpt_path,
-                        source_label=source.label,
-                        alpha=target.alpha,
-                        gamma=target.gamma,
-                        iteration=iteration,
-                        note=f"transition source={source.label} target={target.name} iter={iteration}",
-                    )
-                    record["checkpoint_path"] = iter_ckpt_path
-
-                if iteration % args.eval_every == 0:
-                    eval_info = evaluate(agent, eval_env)
-                    last_eval = eval_info
-                    iter_plan_path = os.path.join(plan_dir, f"iter_{iteration:06d}_control_plan.npz")
-                    save_eval_plan(
-                        eval_info,
-                        alpha=target.alpha,
-                        gamma=target.gamma,
-                        dt_ns=args.dt_ns,
-                        runtime_norm_ns=args.runtime_norm_ns,
-                        weights=weights,
-                        path=iter_plan_path,
-                        note=f"transition source={source.label} target={target.name} iter={iteration}",
-                    )
-                    record.update(
-                        {
-                            "eval_cost": float(eval_info["cost"]),
-                            "eval_fidelity": float(eval_info["fidelity"]),
-                            "eval_leakage": float(eval_info["leakage"]),
-                            "eval_time_ns": float(eval_info["time_ns"]),
-                            "eval_plan_path": iter_plan_path,
-                        }
-                    )
-                    if float(eval_info["cost"]) < best_eval_cost:
-                        best_eval_cost = float(eval_info["cost"])
-                        best_eval = eval_info
+                    iter_ckpt_path = os.path.join(ckpt_dir, f"iter_{iteration:06d}.pt")
+                    if args.save_every > 0 and (iteration % args.save_every == 0 or iteration == args.iterations):
                         save_checkpoint(
                             agent,
-                            best_ckpt_path,
+                            iter_ckpt_path,
                             source_label=source.label,
                             alpha=target.alpha,
                             gamma=target.gamma,
                             iteration=iteration,
-                            note="best transition checkpoint",
+                            note=f"transition source={source.label} target={target.name} iter={iteration}",
                         )
+                        record["checkpoint_path"] = iter_ckpt_path
+    
+                    if iteration % args.eval_every == 0:
+                        eval_info = evaluate(agent, eval_env)
+                        last_eval = eval_info
+                        iter_plan_path = os.path.join(plan_dir, f"iter_{iteration:06d}_control_plan.npz")
                         save_eval_plan(
                             eval_info,
                             alpha=target.alpha,
@@ -409,13 +378,44 @@ def main() -> None:
                             dt_ns=args.dt_ns,
                             runtime_norm_ns=args.runtime_norm_ns,
                             weights=weights,
-                            path=best_plan_path,
-                            note="best transition plan",
+                            path=iter_plan_path,
+                            note=f"transition source={source.label} target={target.name} iter={iteration}",
                         )
-
-                logger.write(record)
-                print(json.dumps(record), flush=True)
-
+                        record.update(
+                            {
+                                "eval_cost": float(eval_info["cost"]),
+                                "eval_fidelity": float(eval_info["fidelity"]),
+                                "eval_leakage": float(eval_info["leakage"]),
+                                "eval_time_ns": float(eval_info["time_ns"]),
+                                "eval_plan_path": iter_plan_path,
+                            }
+                        )
+                        if float(eval_info["cost"]) < best_eval_cost:
+                            best_eval_cost = float(eval_info["cost"])
+                            best_eval = eval_info
+                            save_checkpoint(
+                                agent,
+                                best_ckpt_path,
+                                source_label=source.label,
+                                alpha=target.alpha,
+                                gamma=target.gamma,
+                                iteration=iteration,
+                                note="best transition checkpoint",
+                            )
+                            save_eval_plan(
+                                eval_info,
+                                alpha=target.alpha,
+                                gamma=target.gamma,
+                                dt_ns=args.dt_ns,
+                                runtime_norm_ns=args.runtime_norm_ns,
+                                weights=weights,
+                                path=best_plan_path,
+                                note="best transition plan",
+                            )
+    
+                    logger.write(record)
+                    print(json.dumps(record), flush=True)
+    
             final_ckpt_path = os.path.join(target_dir, "final_agent.pt")
             save_checkpoint(
                 agent,

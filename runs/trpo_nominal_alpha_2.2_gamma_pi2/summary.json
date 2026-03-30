@@ -1,0 +1,16 @@
+{
+  "alpha": 2.2,
+  "best_ckpt_path": "runs/trpo_nominal_alpha_2.2_gamma_pi2\\best_agent.pt",
+  "best_eval_cost": 0.4231239816720996,
+  "best_eval_fidelity": 0.9956840939240512,
+  "best_eval_leakage": 0.00212474930165553,
+  "best_eval_time_ns": 180.0,
+  "best_plan_path": "runs/trpo_nominal_alpha_2.2_gamma_pi2\\best_control_plan.npz",
+  "episodes_per_batch": 3000,
+  "final_ckpt_path": "runs/trpo_nominal_alpha_2.2_gamma_pi2\\final_agent.pt",
+  "final_plan_path": "runs/trpo_nominal_alpha_2.2_gamma_pi2\\final_control_plan.npz",
+  "gamma": 1.5707963267948966,
+  "init_checkpoint": null,
+  "iterations": 100,
+  "noise_optimized": false
+}
