@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import os
+import sys
 from typing import Any, Dict, List, Tuple
 
 # Keep Torch CPU-only and single-threaded in this environment.
@@ -224,6 +226,7 @@ def save_json(path: str, payload: Dict[str, Any]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Train a single-target TRPO controller for the UFO experiment.")
+    parser.add_argument("--resume", type=str, default=None, help="Path to experiment folder to resume from")
     parser.add_argument("--alpha", type=str, required=True, help="Target alpha, e.g. '2.2' or 'pi/2'")
     parser.add_argument("--gamma", type=str, default="pi/2", help="Target gamma, e.g. 'pi/2'")
     parser.add_argument("--noise-optimized", action="store_true", help="Train in the stochastic 1 MHz environment.")
@@ -263,6 +266,22 @@ def main() -> None:
         help="Monte Carlo samples per robustness evaluation.",
     )
     parser.add_argument("--out", type=str, required=True)
+
+    if "--resume" in sys.argv:
+        idx = sys.argv.index("--resume")
+        if idx + 1 < len(sys.argv):
+            resume_path = sys.argv[idx + 1]
+            args_file = os.path.join(resume_path, "args.json")
+            if os.path.exists(args_file):
+                with open(args_file, "r") as f:
+                    saved_args = json.load(f)
+                for action in parser._actions:
+                    if action.dest in saved_args:
+                        action.required = False
+                parser.set_defaults(**saved_args)
+            else:
+                print(f"Warning: --resume provided but args.json not found in {resume_path}")
+
     args = parser.parse_args()
 
     alpha = parse_angle_expr(args.alpha)
@@ -270,6 +289,11 @@ def main() -> None:
     robustness_sigmas = parse_float_csv(args.robustness_sigmas)
     set_seeds(args.seed)
     ensure_dir(args.out)
+    
+    with open(os.path.join(args.out, "args.json"), "w") as f:
+        save_args = {k: v for k, v in vars(args).items() if k != "resume"}
+        json.dump(save_args, f, indent=2)
+
     logger = JsonlLogger(os.path.join(args.out, "training_log.jsonl"))
     checkpoints_dir = os.path.join(args.out, "checkpoints")
     plans_dir = os.path.join(args.out, "plans")
@@ -331,12 +355,34 @@ def main() -> None:
     )
     agent = TRPOAgent(train_env.observation_dim, train_env.action_dim, config=trpo_cfg)
 
+    start_iteration = 0
+    if args.resume:
+        checkpoints_dir_res = os.path.join(args.resume, "checkpoints")
+        if os.path.isdir(checkpoints_dir_res):
+            ckpt_files = glob.glob(os.path.join(checkpoints_dir_res, "iter_*.pt"))
+            if ckpt_files:
+                latest_ckpt_path = max(ckpt_files, key=lambda p: int(os.path.basename(p).replace("iter_", "").replace(".pt", "")))
+                last_iter = int(os.path.basename(latest_ckpt_path).replace("iter_", "").replace(".pt", ""))
+                print(f"Resuming from checkpoint: {latest_ckpt_path} at iteration {last_iter}")
+                args.init_checkpoint = latest_ckpt_path
+                start_iteration = last_iter
+
     init_meta: Dict[str, object] | None = None
     if args.init_checkpoint:
         init_meta = load_checkpoint_into_agent(agent, args.init_checkpoint)
 
     best_eval_cost = float("inf")
     best_eval: Dict[str, object] | None = None
+    if args.resume:
+        summary_path = os.path.join(args.resume, "summary.json")
+        if os.path.exists(summary_path):
+            with open(summary_path, "r") as f:
+                try:
+                    old_summary = json.load(f)
+                    best_eval_cost = float(old_summary.get("best_eval_cost", float("inf")))
+                except:
+                    pass
+
     best_plan_path = os.path.join(args.out, "best_control_plan.npz")
     best_ckpt_path = os.path.join(args.out, "best_agent.pt")
     last_eval_info: Dict[str, object] | None = None
@@ -352,7 +398,7 @@ def main() -> None:
     )
 
     with collector:
-        for iteration in range(1, args.iterations + 1):
+        for iteration in range(start_iteration + 1, args.iterations + 1):
             if args.num_workers > 1:
                 transitions, finals = collector.collect(agent, args.episodes_per_batch)
             else:
