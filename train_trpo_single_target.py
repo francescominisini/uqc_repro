@@ -240,6 +240,10 @@ def main() -> None:
     parser.add_argument("--runtime-norm-ns", type=float, default=60.0)
     parser.add_argument("--termination-cost", type=float, default=0.15)
     parser.add_argument("--seed", type=int, default=1)
+    parser.add_argument("--cost-chi", type=float, default=10.0, help="Weight for fidelity cost")
+    parser.add_argument("--cost-beta", type=float, default=10.0, help="Weight for leakage cost")
+    parser.add_argument("--cost-mu", type=float, default=0.2, help="Weight for boundary cost")
+    parser.add_argument("--cost-kappa", type=float, default=0.1, help="Weight for time cost")
     parser.add_argument("--reward-mode", type=str, default="dense_current_cost", choices=["dense_current_cost", "terminal_ufo"])
     parser.add_argument("--max-kl", type=float, default=0.01)
     parser.add_argument("--gamma-rl", type=float, default=0.99)
@@ -309,7 +313,12 @@ def main() -> None:
             bandwidth_mhz=10.0,
         )
     )
-    weights = UFOCostWeights()
+    weights = UFOCostWeights(
+        chi=args.cost_chi,
+        beta=args.cost_beta,
+        mu=args.cost_mu,
+        kappa=args.cost_kappa,
+    )
     train_env = QuantumControlEnv(
         system,
         EnvConfig(

@@ -123,7 +123,7 @@ def sort_rows(rows: List[Dict[str, Any]], primary_metric: str) -> List[Dict[str,
 
 def build_trpo_jobs(args: argparse.Namespace) -> Tuple[List[Dict[str, Any]], List[str]]:
     configs: List[Dict[str, Any]] = []
-    keys = ["alpha", "gamma", "max_kl", "termination_cost", "init_log_std", "dt_ns", "max_time_ns"]
+    keys = ["alpha", "gamma", "max_kl", "termination_cost", "init_log_std", "dt_ns", "max_time_ns", "cost_chi", "cost_beta", "cost_mu", "cost_kappa"]
 
     alphas = parse_csv_list(args.alphas, str)
     gammas = parse_csv_list(args.gammas, str)
@@ -132,9 +132,13 @@ def build_trpo_jobs(args: argparse.Namespace) -> Tuple[List[Dict[str, Any]], Lis
     init_log_stds = parse_csv_list(args.init_log_stds, float)
     dt_vals = parse_csv_list(args.dt_values, float)
     max_time_vals = parse_csv_list(args.max_time_values, float)
+    chis = parse_csv_list(args.cost_chis, float)
+    betas = parse_csv_list(args.cost_betas, float)
+    mus = parse_csv_list(args.cost_mus, float)
+    kappas = parse_csv_list(args.cost_kappas, float)
 
-    for alpha, gamma, max_kl, term_cost, init_log_std, dt_ns, max_time_ns in itertools.product(
-        alphas, gammas, max_kls, termination_costs, init_log_stds, dt_vals, max_time_vals
+    for alpha, gamma, max_kl, term_cost, init_log_std, dt_ns, max_time_ns, chi, beta, mu, kappa in itertools.product(
+        alphas, gammas, max_kls, termination_costs, init_log_stds, dt_vals, max_time_vals, chis, betas, mus, kappas
     ):
         configs.append(
             {
@@ -145,6 +149,10 @@ def build_trpo_jobs(args: argparse.Namespace) -> Tuple[List[Dict[str, Any]], Lis
                 "init_log_std": init_log_std,
                 "dt_ns": dt_ns,
                 "max_time_ns": max_time_ns,
+                "cost_chi": chi,
+                "cost_beta": beta,
+                "cost_mu": mu,
+                "cost_kappa": kappa,
             }
         )
     return configs, keys
@@ -152,7 +160,7 @@ def build_trpo_jobs(args: argparse.Namespace) -> Tuple[List[Dict[str, Any]], Lis
 
 def build_adam_jobs(args: argparse.Namespace) -> Tuple[List[Dict[str, Any]], List[str]]:
     configs: List[Dict[str, Any]] = []
-    keys = ["alpha", "gamma", "lr", "adam_iters", "horizons_ns", "dt_ns"]
+    keys = ["alpha", "gamma", "lr", "adam_iters", "horizons_ns", "dt_ns", "cost_chi", "cost_beta", "cost_mu", "cost_kappa"]
 
     alphas = parse_csv_list(args.alphas, str)
     gammas = parse_csv_list(args.gammas, str)
@@ -160,9 +168,13 @@ def build_adam_jobs(args: argparse.Namespace) -> Tuple[List[Dict[str, Any]], Lis
     adam_iters_list = parse_csv_list(args.adam_iters_list, int)
     horizons_list = parse_csv_list(args.horizons_list, str)
     dt_vals = parse_csv_list(args.dt_values, float)
+    chis = parse_csv_list(args.cost_chis, float)
+    betas = parse_csv_list(args.cost_betas, float)
+    mus = parse_csv_list(args.cost_mus, float)
+    kappas = parse_csv_list(args.cost_kappas, float)
 
-    for alpha, gamma, lr, adam_iters, horizons_ns, dt_ns in itertools.product(
-        alphas, gammas, lrs, adam_iters_list, horizons_list, dt_vals
+    for alpha, gamma, lr, adam_iters, horizons_ns, dt_ns, chi, beta, mu, kappa in itertools.product(
+        alphas, gammas, lrs, adam_iters_list, horizons_list, dt_vals, chis, betas, mus, kappas
     ):
         configs.append(
             {
@@ -172,6 +184,10 @@ def build_adam_jobs(args: argparse.Namespace) -> Tuple[List[Dict[str, Any]], Lis
                 "adam_iters": adam_iters,
                 "horizons_ns": horizons_ns,
                 "dt_ns": dt_ns,
+                "cost_chi": chi,
+                "cost_beta": beta,
+                "cost_mu": mu,
+                "cost_kappa": kappa,
             }
         )
     return configs, keys
@@ -202,6 +218,10 @@ def build_trpo_command(
         "--max-kl", str(cfg["max_kl"]),
         "--init-log-std", str(cfg["init_log_std"]),
         "--num-workers", str(args.num_workers),
+        "--cost-chi", str(cfg["cost_chi"]),
+        "--cost-beta", str(cfg["cost_beta"]),
+        "--cost-mu", str(cfg["cost_mu"]),
+        "--cost-kappa", str(cfg["cost_kappa"]),
         "--out", str(out_dir),
     ]
     if args.noise_optimized:
@@ -231,6 +251,10 @@ def build_adam_command(
         "--adam-iters", str(cfg["adam_iters"]),
         "--horizons-ns", str(cfg["horizons_ns"]),
         "--seed", str(seed),
+        "--cost-chi", str(cfg["cost_chi"]),
+        "--cost-beta", str(cfg["cost_beta"]),
+        "--cost-mu", str(cfg["cost_mu"]),
+        "--cost-kappa", str(cfg["cost_kappa"]),
         "--out", str(out_dir),
     ]
     if args.adam_train_noise_std > 0:
@@ -273,6 +297,12 @@ def main() -> None:
     # Shared compute knobs
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--episodes-per-task", type=int, default=0)
+
+    # Cost space weights
+    parser.add_argument("--cost-chis", type=str, default="10.0")
+    parser.add_argument("--cost-betas", type=str, default="10.0")
+    parser.add_argument("--cost-mus", type=str, default="0.2")
+    parser.add_argument("--cost-kappas", type=str, default="0.1")
 
     # TRPO search space
     parser.add_argument("--noise-optimized", action="store_true")
@@ -318,14 +348,22 @@ def main() -> None:
                 print(f"[skip] {summary_path} already exists", flush=True)
             else:
                 if args.mode == "trpo":
-                    cmd = build_trpo_command(
-                        python_exec=sys.executable,
-                        root=root,
-                        out_dir=run_dir,
-                        cfg=cfg,
-                        seed=seed,
-                        args=args,
-                    )
+                    if (run_dir / "args.json").exists() and not args.force:
+                        print(f"[resume] Resuming interrupted run at {run_dir}", flush=True)
+                        cmd = [
+                            sys.executable,
+                            str(root / "train_trpo_single_target.py"),
+                            "--resume", str(run_dir)
+                        ]
+                    else:
+                        cmd = build_trpo_command(
+                            python_exec=sys.executable,
+                            root=root,
+                            out_dir=run_dir,
+                            cfg=cfg,
+                            seed=seed,
+                            args=args,
+                        )
                 else:
                     cmd = build_adam_command(
                         python_exec=sys.executable,

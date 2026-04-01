@@ -1,0 +1,22 @@
+{
+  "alpha": 2.2,
+  "best_ckpt_path": "runs/trpo_noise_alpha_2.2_gamma_pi2_10k_episodes_2nd_0.4ec_2nd\\best_agent.pt",
+  "best_eval_cost": 0.3822430963111507,
+  "best_eval_fidelity": 0.9878172317647098,
+  "best_eval_leakage": 0.001316250853708855,
+  "best_eval_time_ns": 104.0,
+  "best_plan_path": "runs/trpo_noise_alpha_2.2_gamma_pi2_10k_episodes_2nd_0.4ec_2nd\\best_control_plan.npz",
+  "episodes_per_batch": 10000,
+  "final_ckpt_path": "runs/trpo_noise_alpha_2.2_gamma_pi2_10k_episodes_2nd_0.4ec_2nd\\final_agent.pt",
+  "final_plan_path": "runs/trpo_noise_alpha_2.2_gamma_pi2_10k_episodes_2nd_0.4ec_2nd\\final_control_plan.npz",
+  "gamma": 1.5707963267948966,
+  "init_checkpoint": "runs\\trpo_noise_alpha_2.2_gamma_pi2_10k_episodes_2nd_0.4ec_2nd\\checkpoints\\iter_000053.pt",
+  "init_checkpoint_iteration": 53,
+  "iterations": 100,
+  "last_robustness_path": "runs/trpo_noise_alpha_2.2_gamma_pi2_10k_episodes_2nd_0.4ec_2nd\\robustness\\iter_000100_robustness.json",
+  "noise_optimized": true,
+  "robustness_samples": 60,
+  "robustness_sigmas": [
+    1.0
+  ]
+}

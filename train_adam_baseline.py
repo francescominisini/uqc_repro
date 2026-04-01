@@ -24,6 +24,10 @@ def main() -> None:
     parser.add_argument("--train-noise-std", type=float, default=0.0)
     parser.add_argument("--train-noise-samples", type=int, default=1)
     parser.add_argument("--seed", type=int, default=1)
+    parser.add_argument("--cost-chi", type=float, default=10.0, help="Weight for fidelity cost")
+    parser.add_argument("--cost-beta", type=float, default=10.0, help="Weight for leakage cost")
+    parser.add_argument("--cost-mu", type=float, default=0.2, help="Weight for boundary cost")
+    parser.add_argument("--cost-kappa", type=float, default=0.1, help="Weight for time cost")
     parser.add_argument("--out", type=str, required=True)
     args = parser.parse_args()
 
@@ -33,7 +37,12 @@ def main() -> None:
 
     set_seeds(args.seed)
     ensure_dir(args.out)
-    weights = UFOCostWeights()
+    weights = UFOCostWeights(
+        chi=args.cost_chi,
+        beta=args.cost_beta,
+        mu=args.cost_mu,
+        kappa=args.cost_kappa,
+    )
     baseline_cfg = AdamBaselineConfig(
         dt_ns=args.dt_ns,
         runtime_norm_ns=args.runtime_norm_ns,
