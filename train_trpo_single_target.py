@@ -63,12 +63,17 @@ def summarize_final_infos(finals: List[Dict[str, float]]) -> Dict[str, float]:
             "avg_time_ns": float("nan"),
             "avg_boundary_cost": float("nan"),
             "avg_time_cost": float("nan"),
+            "avg_min_cost": float("nan"),
+            "avg_min_cost_time_ns": float("nan"),
+            "std_min_cost_time_ns": float("nan"),
         }
-    keys = ["cost", "fidelity", "leakage", "time_ns", "boundary_cost", "time_cost"]
+    keys = ["cost", "fidelity", "leakage", "time_ns", "boundary_cost", "time_cost", "min_cost", "min_cost_time_ns"]
     out: Dict[str, float] = {}
     for key in keys:
         vals = [float(info.get(key, np.nan)) for info in finals]
         out[f"avg_{key}"] = float(np.nanmean(vals))
+        if key == "min_cost_time_ns":
+            out[f"std_{key}"] = float(np.nanstd(vals))
     return out
 
 
@@ -456,6 +461,8 @@ def main() -> None:
                         "eval_fidelity": float(eval_info["fidelity"]),
                         "eval_leakage": float(eval_info["leakage"]),
                         "eval_time_ns": float(eval_info["time_ns"]),
+                        "eval_min_cost": float(eval_info["min_cost"]),
+                        "eval_min_cost_time_ns": float(eval_info["min_cost_time_ns"]),
                         "eval_plan_path": iter_plan_path,
                     }
                 )
@@ -573,6 +580,8 @@ def main() -> None:
                 "best_eval_fidelity": float(best_eval["fidelity"]),
                 "best_eval_leakage": float(best_eval["leakage"]),
                 "best_eval_time_ns": float(best_eval["time_ns"]),
+                "best_eval_min_cost": float(best_eval["min_cost"]),
+                "best_eval_min_cost_time_ns": float(best_eval["min_cost_time_ns"]),
             }
         )
 

@@ -208,6 +208,15 @@ class QuantumControlEnv:
             obs = next_obs
             if done:
                 break
+        
+        if self.cost_history:
+            min_cost_idx = int(np.argmin(self.cost_history))
+            info["min_cost"] = float(self.cost_history[min_cost_idx])
+            info["min_cost_time_ns"] = float((min_cost_idx + 1) * self.system.dt_ns)
+        else:
+            info["min_cost"] = np.inf
+            info["min_cost_time_ns"] = 0.0
+
         return {
             "transitions": transitions,
             "nominal_controls": np.asarray(self.nominal_controls_history, dtype=np.float64),

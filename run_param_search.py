@@ -33,11 +33,30 @@ def slugify_value(x: Any) -> str:
     )
 
 
+KEY_ALIASES = {
+    "alpha": "a",
+    "gamma": "g",
+    "max_kl": "kl",
+    "termination_cost": "tc",
+    "init_log_std": "std",
+    "dt_ns": "dt",
+    "max_time_ns": "mt",
+    "cost_chi": "chi",
+    "cost_beta": "beta",
+    "cost_mu": "mu",
+    "cost_kappa": "kappa",
+    "lr": "lr",
+    "adam_iters": "it",
+    "horizons_ns": "h",
+}
+
+
 def config_to_name(config: Dict[str, Any], keys: Iterable[str]) -> str:
     chunks = []
     for k in keys:
         v = config[k]
-        chunks.append(f"{k}-{slugify_value(v)}")
+        alias = KEY_ALIASES.get(k, k)
+        chunks.append(f"{alias}-{slugify_value(v)}")
     return "__".join(chunks)
 
 
