@@ -25,7 +25,7 @@ class TRPOConfig:
     value_lr: float = 1e-3
     value_epochs: int = 50
     init_log_std: float = -0.5
-    hidden_sizes: Tuple[int, int, int] = (64, 32, 32)
+    hidden_sizes: Tuple[int, ...] = (64, 32, 32)
 
 
 

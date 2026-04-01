@@ -48,6 +48,7 @@ KEY_ALIASES = {
     "lr": "lr",
     "adam_iters": "it",
     "horizons_ns": "h",
+    "hidden_sizes": "hs",
 }
 
 
@@ -142,7 +143,7 @@ def sort_rows(rows: List[Dict[str, Any]], primary_metric: str) -> List[Dict[str,
 
 def build_trpo_jobs(args: argparse.Namespace) -> Tuple[List[Dict[str, Any]], List[str]]:
     configs: List[Dict[str, Any]] = []
-    keys = ["alpha", "gamma", "max_kl", "termination_cost", "init_log_std", "dt_ns", "max_time_ns", "cost_chi", "cost_beta", "cost_mu", "cost_kappa"]
+    keys = ["alpha", "gamma", "max_kl", "termination_cost", "init_log_std", "dt_ns", "max_time_ns", "cost_chi", "cost_beta", "cost_mu", "cost_kappa", "hidden_sizes"]
 
     alphas = parse_csv_list(args.alphas, str)
     gammas = parse_csv_list(args.gammas, str)
@@ -155,9 +156,10 @@ def build_trpo_jobs(args: argparse.Namespace) -> Tuple[List[Dict[str, Any]], Lis
     betas = parse_csv_list(args.cost_betas, float)
     mus = parse_csv_list(args.cost_mus, float)
     kappas = parse_csv_list(args.cost_kappas, float)
+    hidden_sizes_list = parse_csv_list(args.hidden_sizes_list, str)
 
-    for alpha, gamma, max_kl, term_cost, init_log_std, dt_ns, max_time_ns, chi, beta, mu, kappa in itertools.product(
-        alphas, gammas, max_kls, termination_costs, init_log_stds, dt_vals, max_time_vals, chis, betas, mus, kappas
+    for alpha, gamma, max_kl, term_cost, init_log_std, dt_ns, max_time_ns, chi, beta, mu, kappa, hs in itertools.product(
+        alphas, gammas, max_kls, termination_costs, init_log_stds, dt_vals, max_time_vals, chis, betas, mus, kappas, hidden_sizes_list
     ):
         configs.append(
             {
@@ -172,6 +174,7 @@ def build_trpo_jobs(args: argparse.Namespace) -> Tuple[List[Dict[str, Any]], Lis
                 "cost_beta": beta,
                 "cost_mu": mu,
                 "cost_kappa": kappa,
+                "hidden_sizes": hs,
             }
         )
     return configs, keys
@@ -243,6 +246,11 @@ def build_trpo_command(
         "--cost-kappa", str(cfg["cost_kappa"]),
         "--out", str(out_dir),
     ]
+    # Handle hidden sizes which is nargs='+'
+    hs_parts = cfg["hidden_sizes"].split("-")
+    cmd.append("--hidden-sizes")
+    cmd.extend(hs_parts)
+
     if args.noise_optimized:
         cmd.append("--noise-optimized")
         cmd.extend(["--train-noise-std", str(args.train_noise_std)])
@@ -333,6 +341,7 @@ def main() -> None:
     parser.add_argument("--init-log-stds", type=str, default="-1.0,-0.5,0.0")
     parser.add_argument("--dt-values", type=str, default="2.0")
     parser.add_argument("--max-time-values", type=str, default="600.0")
+    parser.add_argument("--hidden-sizes-list", type=str, default="64-32-32", help="Comma separated formats like 32-32-32,64-64-64")
 
     # Adam search space
     parser.add_argument("--lrs", type=str, default="0.01,0.03,0.1")

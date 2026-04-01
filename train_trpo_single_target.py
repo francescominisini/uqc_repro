@@ -258,7 +258,7 @@ def main() -> None:
     parser.add_argument("--value-epochs", type=int, default=50)
     parser.add_argument("--cg-iters", type=int, default=10)
     parser.add_argument("--damping", type=float, default=0.1)
-    parser.add_argument("--hidden-sizes", type=int, nargs=3, default=[64, 32, 32])
+    parser.add_argument("--hidden-sizes", type=int, nargs="+", default=[64, 32, 32])
     parser.add_argument("--init-checkpoint", type=str, default=None, help="Optional checkpoint to initialize or resume from.")
     parser.add_argument("--num-workers", type=int, default=1, help="Parallel rollout workers for batch collection.")
     parser.add_argument("--episodes-per-task", type=int, default=0, help="Episodes per worker task; 0 chooses automatically.")
