@@ -221,3 +221,6 @@ __marimo__/
 codeexport.config.psd1
 codebase.txt
 exported_cb/
+
+sweep_status.txt
+show_sweep_status.py
