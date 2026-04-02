@@ -381,6 +381,7 @@ def main() -> None:
                 print(f"Resuming from checkpoint: {latest_ckpt_path} at iteration {last_iter}")
                 args.init_checkpoint = latest_ckpt_path
                 start_iteration = last_iter
+                logger.truncate_to_iteration(last_iter)
 
     init_meta: Dict[str, object] | None = None
     if args.init_checkpoint:

@@ -369,10 +369,15 @@ def main() -> None:
         configs, config_keys = build_adam_jobs(args)
 
     raw_rows: List[Dict[str, Any]] = []
+    seen_runs = set()
 
     for cfg_idx, cfg in enumerate(configs, start=1):
         cfg_name = config_to_name(cfg, config_keys)
         for seed in seeds:
+            if (cfg_name, seed) in seen_runs:
+                continue
+            seen_runs.add((cfg_name, seed))
+            
             run_dir = out_root / args.mode / cfg_name / f"seed_{seed}"
             ensure_dir(run_dir)
             summary_path = run_dir / "summary.json"

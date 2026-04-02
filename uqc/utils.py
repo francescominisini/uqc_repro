@@ -45,6 +45,26 @@ class JsonlLogger:
         with open(self.path, "a", encoding="utf-8") as f:
             f.write(json.dumps(record, sort_keys=True) + "\n")
 
+    def truncate_to_iteration(self, iteration: int) -> None:
+        if not os.path.exists(self.path):
+            return
+        
+        valid_lines = []
+        with open(self.path, "r", encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                try:
+                    record = json.loads(line)
+                    if record.get("iteration", 0) <= iteration:
+                        valid_lines.append(line)
+                except json.JSONDecodeError:
+                    pass
+        
+        with open(self.path, "w", encoding="utf-8") as f:
+            for line in valid_lines:
+                f.write(line)
+
 
 def dataclass_to_dict(obj: Any) -> Dict[str, Any]:
     if is_dataclass(obj):
