@@ -52,13 +52,18 @@ KEY_ALIASES = {
 }
 
 
+import hashlib
+
 def config_to_name(config: Dict[str, Any], keys: Iterable[str]) -> str:
     chunks = []
     for k in keys:
         v = config[k]
         alias = KEY_ALIASES.get(k, k)
         chunks.append(f"{alias}-{slugify_value(v)}")
-    return "__".join(chunks)
+    old_name = "__".join(chunks)
+    hash_str = hashlib.md5(old_name.encode("utf-8")).hexdigest()[:8]
+    prefix = chunks[0] if chunks else "cfg"
+    return f"{prefix}_{hash_str}"
 
 
 def run_cmd(cmd: List[str]) -> None:
