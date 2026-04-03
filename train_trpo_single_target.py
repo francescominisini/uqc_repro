@@ -294,6 +294,11 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    if args.resume:
+        # Force output to the resume directory to avoid writing to outdated paths
+        # that might be stored in the resumed args.json
+        args.out = args.resume
+
     alpha = parse_angle_expr(args.alpha)
     gamma = parse_angle_expr(args.gamma)
     robustness_sigmas = parse_float_csv(args.robustness_sigmas)
@@ -378,7 +383,7 @@ def main() -> None:
             if ckpt_files:
                 latest_ckpt_path = max(ckpt_files, key=lambda p: int(os.path.basename(p).replace("iter_", "").replace(".pt", "")))
                 last_iter = int(os.path.basename(latest_ckpt_path).replace("iter_", "").replace(".pt", ""))
-                print(f"Resuming from checkpoint: {latest_ckpt_path} at iteration {last_iter}")
+                print(f"Resuming from checkpoint: {latest_ckpt_path} at iteration {last_iter}", flush=True)
                 args.init_checkpoint = latest_ckpt_path
                 start_iteration = last_iter
                 logger.truncate_to_iteration(last_iter)
