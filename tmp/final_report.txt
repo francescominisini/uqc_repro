@@ -1,0 +1,4 @@
+Checking 49 files...
+MALFORMED: runs\cost_function_sweep\trpo\a-2p2_13dc12d5\seed_1\training_log.jsonl - 1 lines
+MALFORMED: runs\cost_function_sweep\trpo\a-2p2_520a1971\seed_1\training_log.jsonl - 3 lines
+Check finished.
