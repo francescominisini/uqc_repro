@@ -208,11 +208,12 @@ def main() -> None:
             break
         alpha = next_alpha
 
-    init_meta: Dict[str, object] | None = None
-
     import glob
 
-    for gamma in gamma_values:
+    total_gammas = len(gamma_values)
+    total_alphas = len(alpha_values)
+
+    for gamma_idx, gamma in enumerate(gamma_values, start=1):
         gamma_dir = os.path.join(args.out, f"gamma_{gamma:.6f}")
         ensure_dir(gamma_dir)
         ensure_dir(os.path.join(gamma_dir, "curriculum_checkpoints"))
@@ -220,14 +221,14 @@ def main() -> None:
         agent = None
         last_curriculum_ckpt = args.init_checkpoint
 
-        for alpha in alpha_values:
+        for alpha_idx, alpha in enumerate(alpha_values, start=1):
             phase_dir = os.path.join(gamma_dir, f"alpha_{alpha:.6f}")
             phase_ckpt_dir = os.path.join(phase_dir, "checkpoints")
             phase_plan_dir = os.path.join(phase_dir, "plans")
             
             summary_path = os.path.join(phase_dir, "summary.json")
             if getattr(args, "resume", False) and os.path.exists(summary_path):
-                print(f"Skipping completed phase gamma={gamma:.6f}, alpha={alpha:.6f}", flush=True)
+                print(f"[Gamma {gamma_idx}/{total_gammas} | Alpha {alpha_idx}/{total_alphas}] Skipping completed phase gamma={gamma:.6f}, alpha={alpha:.6f}", flush=True)
                 with open(summary_path, "r", encoding="utf-8") as f:
                     summary_rows.append(json.load(f))
                 last_curriculum_ckpt = os.path.join(gamma_dir, "curriculum_checkpoints", f"after_alpha_{alpha:.6f}.pt")
@@ -281,7 +282,7 @@ def main() -> None:
                     if ckpt_files:
                         latest_ckpt_path = max(ckpt_files, key=lambda p: int(os.path.basename(p).replace("iter_", "").replace(".pt", "")))
                         start_iteration = int(os.path.basename(latest_ckpt_path).replace("iter_", "").replace(".pt", ""))
-                        print(f"Resuming phase gamma={gamma:.6f}, alpha={alpha:.6f} from iter {start_iteration}", flush=True)
+                        print(f"[Gamma {gamma_idx}/{total_gammas} | Alpha {alpha_idx}/{total_alphas}] Resuming phase gamma={gamma:.6f}, alpha={alpha:.6f} from iter {start_iteration}", flush=True)
                         load_checkpoint_into_agent(agent, latest_ckpt_path)
                         
                         log_path = logger.path
@@ -311,7 +312,7 @@ def main() -> None:
                                                     phase_iters_used = r.get("phase_iter", 0)
                                     except Exception: pass
                     elif last_curriculum_ckpt and os.path.exists(last_curriculum_ckpt):
-                        print(f"Starting phase gamma={gamma:.6f}, alpha={alpha:.6f} from curriculum ckpt", flush=True)
+                        print(f"[Gamma {gamma_idx}/{total_gammas} | Alpha {alpha_idx}/{total_alphas}] Starting phase gamma={gamma:.6f}, alpha={alpha:.6f} from curriculum ckpt", flush=True)
                         init_meta = load_checkpoint_into_agent(agent, last_curriculum_ckpt)
                 elif last_curriculum_ckpt and os.path.exists(last_curriculum_ckpt):
                     init_meta = load_checkpoint_into_agent(agent, last_curriculum_ckpt)
@@ -326,6 +327,7 @@ def main() -> None:
             )
             with collector:
                 for phase_iter in range(start_iteration + 1, args.max_iters_per_alpha + 1):
+                    print(f"\n--- [Progress] Gamma {gamma_idx}/{total_gammas} | Alpha {alpha_idx}/{total_alphas} | Iter {phase_iter}/{args.max_iters_per_alpha} ---", flush=True)
                     transitions, finals = (collector.collect(agent, args.episodes_per_batch) if args.num_workers > 1 else collect_batch(train_env, agent, args.episodes_per_batch))
                     update_info = agent.update(transitions)
                     train_stats = summarize(finals)
