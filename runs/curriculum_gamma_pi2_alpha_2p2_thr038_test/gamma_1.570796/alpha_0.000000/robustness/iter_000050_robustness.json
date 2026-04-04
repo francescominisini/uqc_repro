@@ -1,17 +1,17 @@
 {
   "alpha": 0.0,
-  "eval_cost": 0.8200829779789044,
-  "eval_fidelity": 0.9575099368877948,
-  "eval_leakage": 0.003873048495228118,
-  "eval_plan_path": "runs/curriculum_gamma_pi2_alpha_2p2_thr038_test\\gamma_1.570796\\alpha_0.000000\\plans\\iter_000050_control_plan.npz",
+  "eval_cost": 0.7779346879369157,
+  "eval_fidelity": 0.9580195667517875,
+  "eval_leakage": 0.003987993284247436,
+  "eval_plan_path": "runs\\curriculum_gamma_pi2_alpha_2p2_thr038_test\\gamma_1.570796\\alpha_0.000000\\plans\\iter_000050_control_plan.npz",
   "eval_time_ns": 180.0,
   "gamma": 1.5707963267948966,
   "phase_iter": 50,
   "robustness": {
     "sigma_1p0": {
-      "average_fidelity": 0.9211055632720901,
-      "average_gate_fidelity": 0.901381954090113,
-      "fidelity_variance": 0.0008915442088143316,
+      "average_fidelity": 0.922481815319393,
+      "average_gate_fidelity": 0.9031022691492415,
+      "fidelity_variance": 0.0009944862731251147,
       "num_samples": 60,
       "sigma_mhz": 1.0
     }

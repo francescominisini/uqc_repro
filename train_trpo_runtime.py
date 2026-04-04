@@ -237,7 +237,7 @@ def main() -> None:
             save_args = {k: v for k, v in vars(args).items() if k != "resume"}
             json.dump(save_args, f, indent=2)
 
-    advance_train_cost_threshold = args.advance_train_cost_threshold if args.advance_train_cost_threshold is not None else args.advance_cost_threshold
+    advance_train_cost_threshold = args.advance_train_cost_threshold if args.advance_train_cost_threshold is not None else float("inf")
     advance_min_cost_threshold = args.advance_min_cost_threshold if args.advance_min_cost_threshold is not None else float("inf")
 
     robustness_sigmas = parse_float_csv(args.robustness_sigmas)
