@@ -4,7 +4,7 @@ import argparse
 import csv
 import json
 import os
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 # Keep Torch CPU-only and single-threaded in this environment.
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
@@ -17,7 +17,7 @@ import numpy as np
 import torch
 
 from uqc.env import EnvConfig, QuantumControlEnv
-from uqc.eval import ControlPlan
+from uqc.eval import ControlPlan, robustness_metrics
 from uqc.physics import GmonSystem, GmonSystemConfig, UFOCostWeights
 from uqc.parallel import ParallelBatchCollector
 from uqc.trpo import TRPOAgent, TRPOConfig
@@ -57,6 +57,63 @@ def summarize(finals: List[Dict[str, float]]) -> Dict[str, float]:
         vals = [float(x.get(key, np.nan)) for x in finals]
         out[f"avg_{key}"] = float(np.nanmean(vals))
     return out
+
+
+def parse_float_csv(text: str) -> List[float]:
+    text = (text or "").strip()
+    if not text:
+        return []
+    return [float(x.strip()) for x in text.split(",") if x.strip()]
+
+
+def sigma_tag(sigma: float) -> str:
+    return str(float(sigma)).replace("-", "m").replace(".", "p")
+
+
+def compute_robustness_suite(
+    system: GmonSystem,
+    plan: ControlPlan,
+    *,
+    sigmas_mhz: List[float],
+    num_samples: int,
+    base_seed: int,
+) -> Dict[str, Dict[str, float | int]]:
+    out: Dict[str, Dict[str, float | int]] = {}
+    for idx, sigma in enumerate(sigmas_mhz):
+        tag = f"sigma_{sigma_tag(sigma)}"
+        metrics = robustness_metrics(
+            system=system,
+            plan=plan,
+            sigma_mhz=float(sigma),
+            num_samples=int(num_samples),
+            seed=int(base_seed + idx),
+        )
+        out[tag] = {
+            "sigma_mhz": float(metrics["sigma_mhz"]),
+            "num_samples": int(metrics["num_samples"]),
+            "average_fidelity": float(metrics["average_fidelity"]),
+            "average_gate_fidelity": float(metrics["average_gate_fidelity"]),
+            "fidelity_variance": float(metrics["fidelity_variance"]),
+        }
+    return out
+
+
+def flatten_robustness_for_log(
+    robustness: Dict[str, Dict[str, float | int]],
+) -> Dict[str, float]:
+    flat: Dict[str, float] = {}
+    for sigma_key, metrics in robustness.items():
+        for metric_name in ("average_fidelity", "average_gate_fidelity", "fidelity_variance"):
+            value = metrics.get(metric_name)
+            if value is not None:
+                flat[f"robustness_{sigma_key}_{metric_name}"] = float(value)
+    return flat
+
+
+def save_json(path: str, payload: Dict[str, Any]) -> None:
+    ensure_dir(os.path.dirname(path) or ".")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, sort_keys=True)
 
 
 
@@ -134,6 +191,7 @@ def main() -> None:
     parser.add_argument("--termination-cost", type=float, default=0.15)
     parser.add_argument("--advance-cost-threshold", type=float, default=0.15)
     parser.add_argument("--advance-train-cost-threshold", type=float, default=None)
+    parser.add_argument("--advance-min-cost-threshold", type=float, default=None)
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--reward-mode", type=str, default="dense_current_cost", choices=["dense_current_cost", "terminal_ufo"])
     parser.add_argument("--max-kl", type=float, default=0.01)
@@ -148,6 +206,19 @@ def main() -> None:
     parser.add_argument("--init-checkpoint", type=str, default=None, help="Optional checkpoint to initialize the first phase.")
     parser.add_argument("--num-workers", type=int, default=1, help="Parallel rollout workers for batch collection.")
     parser.add_argument("--episodes-per-task", type=int, default=0, help="Episodes per worker task; 0 chooses automatically.")
+    parser.add_argument(
+        "--robustness-sigmas",
+        type=str,
+        default="1.0",
+        help="Comma-separated sigma values in MHz for robustness eval, e.g. '0.5,1.0,2.0'. Empty string disables robustness eval.",
+    )
+    parser.add_argument(
+        "--robustness-samples",
+        type=int,
+        default=60,
+        help="Monte Carlo samples per robustness evaluation.",
+    )
+    parser.add_argument("--eval-robustness-every", type=int, default=1, help="Run robustness evaluation every N iterations.")
     parser.add_argument("--out", type=str, required=True)
     parser.add_argument("--resume", action="store_true", help="Resume from the existing outdir.")
     args = parser.parse_args()
@@ -167,6 +238,9 @@ def main() -> None:
             json.dump(save_args, f, indent=2)
 
     advance_train_cost_threshold = args.advance_train_cost_threshold if args.advance_train_cost_threshold is not None else args.advance_cost_threshold
+    advance_min_cost_threshold = args.advance_min_cost_threshold if args.advance_min_cost_threshold is not None else float("inf")
+
+    robustness_sigmas = parse_float_csv(args.robustness_sigmas)
 
     set_seeds(args.seed)
     alpha_start = parse_angle_expr(args.alpha_start)
@@ -225,6 +299,7 @@ def main() -> None:
             phase_dir = os.path.join(gamma_dir, f"alpha_{alpha:.6f}")
             phase_ckpt_dir = os.path.join(phase_dir, "checkpoints")
             phase_plan_dir = os.path.join(phase_dir, "plans")
+            phase_robustness_dir = os.path.join(phase_dir, "robustness")
             
             summary_path = os.path.join(phase_dir, "summary.json")
             if getattr(args, "resume", False) and os.path.exists(summary_path):
@@ -237,6 +312,7 @@ def main() -> None:
             ensure_dir(phase_dir)
             ensure_dir(phase_ckpt_dir)
             ensure_dir(phase_plan_dir)
+            ensure_dir(phase_robustness_dir)
             train_env = QuantumControlEnv(
                 system,
                 EnvConfig(
@@ -397,11 +473,50 @@ def main() -> None:
                         "eval_plan_path": iter_plan_path,
                         **{f"update_{k}": float(v) for k, v in update_info.items()},
                     }
+
+                    if robustness_sigmas and (phase_iter % args.eval_robustness_every == 0 or phase_iter == args.max_iters_per_alpha):
+                        iter_plan = ControlPlan(
+                            controls_mhz_and_phase=np.asarray(eval_info["nominal_controls"], dtype=np.float64),
+                            target_alpha=alpha,
+                            target_gamma=gamma,
+                            dt_ns=args.dt_ns,
+                            runtime_norm_ns=args.runtime_norm_ns,
+                            cost_weights=weights,
+                            note=f"TRPO runtime sweep iteration {phase_iter}",
+                        )
+                        robustness = compute_robustness_suite(
+                            system=system,
+                            plan=iter_plan,
+                            sigmas_mhz=robustness_sigmas,
+                            num_samples=args.robustness_samples,
+                            base_seed=args.seed + 10000 * phase_iter,
+                        )
+
+                        iter_robustness_path = os.path.join(phase_robustness_dir, f"iter_{phase_iter:06d}_robustness.json")
+                        robustness_payload: Dict[str, Any] = {
+                            "phase_iter": int(phase_iter),
+                            "alpha": float(alpha),
+                            "gamma": float(gamma),
+                            "eval_cost": float(eval_info["cost"]),
+                            "eval_fidelity": float(eval_info["fidelity"]),
+                            "eval_leakage": float(eval_info["leakage"]),
+                            "eval_time_ns": float(eval_info["time_ns"]),
+                            "eval_plan_path": iter_plan_path,
+                            "robustness": robustness,
+                        }
+                        save_json(iter_robustness_path, robustness_payload)
+
+                        record["robustness"] = robustness
+                        record["robustness_path"] = iter_robustness_path
+                        record.update(flatten_robustness_for_log(robustness))
+
                     if iter_ckpt_path:
                         record["checkpoint_path"] = iter_ckpt_path
                     logger.write(record)
                     print(json.dumps(record), flush=True)
-                    if float(eval_info["cost"]) <= args.advance_cost_threshold and float(train_stats["avg_cost"]) <= advance_train_cost_threshold:
+                    if (float(eval_info["cost"]) <= args.advance_cost_threshold and 
+                        float(train_stats["avg_cost"]) <= advance_train_cost_threshold and
+                        float(eval_info.get("min_cost", float("inf"))) <= advance_min_cost_threshold):
                         break
 
             if best_eval is None:
@@ -491,6 +606,8 @@ def main() -> None:
         "runtime_summary_csv": csv_path,
         "num_rows": len(summary_rows),
         "init_checkpoint": args.init_checkpoint,
+        "robustness_sigmas": robustness_sigmas,
+        "robustness_samples": args.robustness_samples,
     }
     if init_meta is not None:
         summary["init_checkpoint_alpha"] = float(init_meta.get("alpha", np.nan)) if isinstance(init_meta.get("alpha", np.nan), (int, float)) else None

@@ -4,7 +4,7 @@
   "noise_optimized": true,
   "train_noise_std": 1.0,
   "episodes_per_batch": 10000,
-  "iterations": 6,
+  "iterations": 10,
   "eval_every": 1,
   "save_every": 1,
   "dt_ns": 2.0,
@@ -32,9 +32,9 @@
     32
   ],
   "init_checkpoint": null,
-  "num_workers": 8,
+  "num_workers": 4,
   "episodes_per_task": 0,
   "robustness_sigmas": "1.0",
   "robustness_samples": 60,
-  "out": "runs\\nn_size_sweep\\trpo\\a-2p2__g-pi_2__kl-0p005__tc-0p1__std-m1p0__dt-2p0__mt-600p0__chi-10p0__beta-10p0__mu-0p2__kappa-0p1__hs-64m64m64m32\\seed_1"
+  "out": "runs\\nn_size_sweep\\trpo\\a-2p2_d1318b1f\\seed_1"
 }

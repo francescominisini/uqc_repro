@@ -1,0 +1,16 @@
+{
+  "alpha": 0.45,
+  "best_checkpoint": "runs/curriculum_gamma_pi2_alpha_2p2_thr038\\gamma_1.570796\\alpha_0.450000\\best_agent.pt",
+  "best_cost": 3.8471684765146934,
+  "best_fidelity": 0.6713439173489186,
+  "best_leakage": 0.002123718995393354,
+  "best_min_cost": 1.5354462163554983,
+  "best_min_cost_time_ns": 126.0,
+  "control_plan": "runs/curriculum_gamma_pi2_alpha_2p2_thr038\\gamma_1.570796\\alpha_0.450000\\best_control_plan.npz",
+  "curriculum_checkpoint": "runs/curriculum_gamma_pi2_alpha_2p2_thr038\\gamma_1.570796\\curriculum_checkpoints\\after_alpha_0.450000.pt",
+  "gamma": 1.5707963267948966,
+  "iterations_used": 15.0,
+  "last_checkpoint": "runs/curriculum_gamma_pi2_alpha_2p2_thr038\\gamma_1.570796\\alpha_0.450000\\last_agent.pt",
+  "runtime_ns": 180.0,
+  "train_avg_fidelity": 0.46782967001980014
+}

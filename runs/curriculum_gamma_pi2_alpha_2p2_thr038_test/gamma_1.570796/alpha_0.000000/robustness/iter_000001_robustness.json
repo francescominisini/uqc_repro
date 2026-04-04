@@ -1,0 +1,19 @@
+{
+  "alpha": 0.0,
+  "eval_cost": 10.318907435744565,
+  "eval_fidelity": 5.066085316176622e-06,
+  "eval_leakage": 0.00011318359185518516,
+  "eval_plan_path": "runs/curriculum_gamma_pi2_alpha_2p2_thr038_test\\gamma_1.570796\\alpha_0.000000\\plans\\iter_000001_control_plan.npz",
+  "eval_time_ns": 180.0,
+  "gamma": 1.5707963267948966,
+  "phase_iter": 1,
+  "robustness": {
+    "sigma_1p0": {
+      "average_fidelity": 0.20007028923864922,
+      "average_gate_fidelity": 8.786154831151326e-05,
+      "fidelity_variance": 8.422473359260277e-09,
+      "num_samples": 60,
+      "sigma_mhz": 1.0
+    }
+  }
+}
