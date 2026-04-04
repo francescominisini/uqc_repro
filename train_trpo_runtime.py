@@ -53,7 +53,7 @@ def collect_batch(env: QuantumControlEnv, agent: TRPOAgent, episodes_per_batch: 
 
 def summarize(finals: List[Dict[str, float]]) -> Dict[str, float]:
     out: Dict[str, float] = {}
-    for key in ["cost", "fidelity", "leakage", "time_ns", "boundary_cost", "time_cost"]:
+    for key in ["cost", "fidelity", "leakage", "time_ns", "boundary_cost", "time_cost", "min_cost", "min_cost_time_ns"]:
         vals = [float(x.get(key, np.nan)) for x in finals]
         out[f"avg_{key}"] = float(np.nanmean(vals))
     return out
@@ -133,6 +133,7 @@ def main() -> None:
     parser.add_argument("--runtime-norm-ns", type=float, default=60.0)
     parser.add_argument("--termination-cost", type=float, default=0.15)
     parser.add_argument("--advance-cost-threshold", type=float, default=0.15)
+    parser.add_argument("--advance-train-cost-threshold", type=float, default=None)
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--reward-mode", type=str, default="dense_current_cost", choices=["dense_current_cost", "terminal_ufo"])
     parser.add_argument("--max-kl", type=float, default=0.01)
@@ -148,10 +149,26 @@ def main() -> None:
     parser.add_argument("--num-workers", type=int, default=1, help="Parallel rollout workers for batch collection.")
     parser.add_argument("--episodes-per-task", type=int, default=0, help="Episodes per worker task; 0 chooses automatically.")
     parser.add_argument("--out", type=str, required=True)
+    parser.add_argument("--resume", action="store_true", help="Resume from the existing outdir.")
     args = parser.parse_args()
 
-    set_seeds(args.seed)
     ensure_dir(args.out)
+    if getattr(args, "resume", False):
+        args_file = os.path.join(args.out, "args.json")
+        if os.path.exists(args_file):
+            with open(args_file, "r") as f:
+                saved_args = json.load(f)
+            for k, v in saved_args.items():
+                if k not in ["resume", "out"]:
+                    setattr(args, k, v)
+    else:
+        with open(os.path.join(args.out, "args.json"), "w") as f:
+            save_args = {k: v for k, v in vars(args).items() if k != "resume"}
+            json.dump(save_args, f, indent=2)
+
+    advance_train_cost_threshold = args.advance_train_cost_threshold if args.advance_train_cost_threshold is not None else args.advance_cost_threshold
+
+    set_seeds(args.seed)
     alpha_start = parse_angle_expr(args.alpha_start)
     alpha_stop = parse_angle_expr(args.alpha_stop)
     gamma_values = [parse_angle_expr(x) for x in args.gammas.split(",") if x.strip()]
@@ -193,16 +210,29 @@ def main() -> None:
 
     init_meta: Dict[str, object] | None = None
 
+    import glob
+
     for gamma in gamma_values:
         gamma_dir = os.path.join(args.out, f"gamma_{gamma:.6f}")
         ensure_dir(gamma_dir)
         ensure_dir(os.path.join(gamma_dir, "curriculum_checkpoints"))
         logger = JsonlLogger(os.path.join(gamma_dir, "training_log.jsonl"))
         agent = None
+        last_curriculum_ckpt = args.init_checkpoint
+
         for alpha in alpha_values:
             phase_dir = os.path.join(gamma_dir, f"alpha_{alpha:.6f}")
             phase_ckpt_dir = os.path.join(phase_dir, "checkpoints")
             phase_plan_dir = os.path.join(phase_dir, "plans")
+            
+            summary_path = os.path.join(phase_dir, "summary.json")
+            if getattr(args, "resume", False) and os.path.exists(summary_path):
+                print(f"Skipping completed phase gamma={gamma:.6f}, alpha={alpha:.6f}", flush=True)
+                with open(summary_path, "r", encoding="utf-8") as f:
+                    summary_rows.append(json.load(f))
+                last_curriculum_ckpt = os.path.join(gamma_dir, "curriculum_checkpoints", f"after_alpha_{alpha:.6f}.pt")
+                continue
+
             ensure_dir(phase_dir)
             ensure_dir(phase_ckpt_dir)
             ensure_dir(phase_plan_dir)
@@ -237,14 +267,55 @@ def main() -> None:
                     seed=args.seed,
                 ),
             )
-            if agent is None:
-                agent = TRPOAgent(train_env.observation_dim, train_env.action_dim, config=trpo_cfg)
-                if args.init_checkpoint:
-                    init_meta = load_checkpoint_into_agent(agent, args.init_checkpoint)
-
             best_eval_cost = float("inf")
             best_eval = None
+            best_train_stats = {}
             phase_iters_used = 0
+            start_iteration = 0
+
+            if agent is None:
+                agent = TRPOAgent(train_env.observation_dim, train_env.action_dim, config=trpo_cfg)
+                
+                if getattr(args, "resume", False):
+                    ckpt_files = glob.glob(os.path.join(phase_ckpt_dir, "iter_*.pt"))
+                    if ckpt_files:
+                        latest_ckpt_path = max(ckpt_files, key=lambda p: int(os.path.basename(p).replace("iter_", "").replace(".pt", "")))
+                        start_iteration = int(os.path.basename(latest_ckpt_path).replace("iter_", "").replace(".pt", ""))
+                        print(f"Resuming phase gamma={gamma:.6f}, alpha={alpha:.6f} from iter {start_iteration}", flush=True)
+                        load_checkpoint_into_agent(agent, latest_ckpt_path)
+                        
+                        log_path = logger.path
+                        if os.path.exists(log_path):
+                            with open(log_path, "r", encoding="utf-8") as f:
+                                for line in f:
+                                    if not line.strip(): continue
+                                    try:
+                                        r = json.loads(line)
+                                        if abs(r.get("gamma", -1) - gamma) < 1e-5 and abs(r.get("alpha", -1) - alpha) < 1e-5:
+                                            if r.get("phase_iter", 0) <= start_iteration:
+                                                c = r.get("eval_cost", float("inf"))
+                                                if c < best_eval_cost:
+                                                    best_eval_cost = c
+                                                    best_eval = {
+                                                        "cost": c,
+                                                        "fidelity": r.get("eval_fidelity", 0.0),
+                                                        "leakage": r.get("eval_leakage", 0.0),
+                                                        "time_ns": r.get("eval_time_ns", 0.0),
+                                                        "min_cost": r.get("eval_min_cost", c),
+                                                        "min_cost_time_ns": r.get("eval_min_cost_time_ns", r.get("eval_time_ns", 0.0)),
+                                                    }
+                                                    best_train_stats = {
+                                                        "avg_fidelity": r.get("avg_fidelity", np.nan),
+                                                        "avg_cost": r.get("avg_cost", np.nan),
+                                                    }
+                                                    phase_iters_used = r.get("phase_iter", 0)
+                                    except Exception: pass
+                    elif last_curriculum_ckpt and os.path.exists(last_curriculum_ckpt):
+                        print(f"Starting phase gamma={gamma:.6f}, alpha={alpha:.6f} from curriculum ckpt", flush=True)
+                        init_meta = load_checkpoint_into_agent(agent, last_curriculum_ckpt)
+                elif last_curriculum_ckpt and os.path.exists(last_curriculum_ckpt):
+                    init_meta = load_checkpoint_into_agent(agent, last_curriculum_ckpt)
+
             collector = ParallelBatchCollector(
                 system_config=system.config,
                 env_config=train_env.config,
@@ -254,7 +325,7 @@ def main() -> None:
                 seed=args.seed + int(round(alpha * 1000.0)) + int(round(gamma * 1000.0)) * 10000,
             )
             with collector:
-                for phase_iter in range(1, args.max_iters_per_alpha + 1):
+                for phase_iter in range(start_iteration + 1, args.max_iters_per_alpha + 1):
                     transitions, finals = (collector.collect(agent, args.episodes_per_batch) if args.num_workers > 1 else collect_batch(train_env, agent, args.episodes_per_batch))
                     update_info = agent.update(transitions)
                     train_stats = summarize(finals)
@@ -289,6 +360,7 @@ def main() -> None:
                     if float(eval_info["cost"]) < best_eval_cost:
                         best_eval_cost = float(eval_info["cost"])
                         best_eval = eval_info
+                        best_train_stats = train_stats
                         save_eval_plan(
                             eval_info,
                             alpha=alpha,
@@ -315,9 +387,11 @@ def main() -> None:
                         "num_workers": int(args.num_workers),
                         **train_stats,
                         "eval_cost": float(eval_info["cost"]),
+                        "eval_min_cost": float(eval_info.get("min_cost", eval_info["cost"])),
                         "eval_fidelity": float(eval_info["fidelity"]),
                         "eval_leakage": float(eval_info["leakage"]),
                         "eval_time_ns": float(eval_info["time_ns"]),
+                        "eval_min_cost_time_ns": float(eval_info.get("min_cost_time_ns", eval_info["time_ns"])),
                         "eval_plan_path": iter_plan_path,
                         **{f"update_{k}": float(v) for k, v in update_info.items()},
                     }
@@ -325,11 +399,12 @@ def main() -> None:
                         record["checkpoint_path"] = iter_ckpt_path
                     logger.write(record)
                     print(json.dumps(record), flush=True)
-                    if float(eval_info["cost"]) <= args.advance_cost_threshold:
+                    if float(eval_info["cost"]) <= args.advance_cost_threshold and float(train_stats["avg_cost"]) <= advance_train_cost_threshold:
                         break
 
             if best_eval is None:
                 best_eval = evaluate(agent, eval_env)
+                best_train_stats = train_stats if 'train_stats' in locals() else {}
             plan_path = os.path.join(phase_dir, "best_control_plan.npz")
             if not os.path.exists(plan_path):
                 save_eval_plan(
@@ -342,7 +417,7 @@ def main() -> None:
                     path=plan_path,
                     note="TRPO curriculum runtime sweep fallback plan",
                 )
-            last_ckpt_path = os.path.join(phase_dir, "final_agent.pt")
+            last_ckpt_path = os.path.join(phase_dir, "last_agent.pt")
             save_checkpoint(
                 agent,
                 last_ckpt_path,
@@ -351,6 +426,11 @@ def main() -> None:
                 phase_iter=phase_iters_used,
                 note="TRPO curriculum runtime sweep final checkpoint for this phase",
             )
+            
+            best_ckpt_path = os.path.join(phase_dir, "best_agent.pt")
+            if os.path.exists(best_ckpt_path):
+                load_checkpoint_into_agent(agent, best_ckpt_path)
+
             curriculum_ckpt_path = os.path.join(gamma_dir, "curriculum_checkpoints", f"after_alpha_{alpha:.6f}.pt")
             save_checkpoint(
                 agent,
@@ -364,13 +444,16 @@ def main() -> None:
                 "alpha": float(alpha),
                 "gamma": float(gamma),
                 "best_cost": float(best_eval["cost"]),
+                "best_min_cost": float(best_eval.get("min_cost", best_eval["cost"])),
+                "best_min_cost_time_ns": float(best_eval.get("min_cost_time_ns", best_eval["time_ns"])),
                 "best_fidelity": float(best_eval["fidelity"]),
                 "best_leakage": float(best_eval["leakage"]),
                 "runtime_ns": float(best_eval["time_ns"]),
+                "train_avg_fidelity": float(best_train_stats.get("avg_fidelity", np.nan)),
                 "iterations_used": float(phase_iters_used),
                 "control_plan": plan_path,
                 "best_checkpoint": os.path.join(phase_dir, "best_agent.pt") if os.path.exists(os.path.join(phase_dir, "best_agent.pt")) else None,
-                "final_checkpoint": last_ckpt_path,
+                "last_checkpoint": last_ckpt_path,
                 "curriculum_checkpoint": curriculum_ckpt_path,
             }
             summary_rows.append(summary_row)
@@ -385,13 +468,16 @@ def main() -> None:
                 "alpha",
                 "gamma",
                 "best_cost",
+                "best_min_cost",
+                "best_min_cost_time_ns",
                 "best_fidelity",
                 "best_leakage",
                 "runtime_ns",
+                "train_avg_fidelity",
                 "iterations_used",
                 "control_plan",
                 "best_checkpoint",
-                "final_checkpoint",
+                "last_checkpoint",
                 "curriculum_checkpoint",
             ],
         )
