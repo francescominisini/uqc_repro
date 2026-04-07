@@ -241,6 +241,7 @@ def main() -> None:
     advance_min_cost_threshold = args.advance_min_cost_threshold if args.advance_min_cost_threshold is not None else float("inf")
 
     robustness_sigmas = parse_float_csv(args.robustness_sigmas)
+    init_meta = None
 
     set_seeds(args.seed)
     alpha_start = parse_angle_expr(args.alpha_start)

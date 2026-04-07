@@ -1,5 +1,5 @@
 {
-  "alpha": 0.0,
+  "alpha": 2.2,
   "best_checkpoint": "runs\\runtime\\gamma_1.570796\\alpha_0.000000\\best_agent.pt",
   "best_cost": 0.18404435631780794,
   "best_fidelity": 0.9987648850054338,
