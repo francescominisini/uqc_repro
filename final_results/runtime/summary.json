@@ -1,0 +1,9 @@
+{
+  "init_checkpoint": null,
+  "num_rows": 21,
+  "robustness_samples": 60,
+  "robustness_sigmas": [
+    1.0
+  ],
+  "runtime_summary_csv": "runs\\runtime\\runtime_summary.csv"
+}

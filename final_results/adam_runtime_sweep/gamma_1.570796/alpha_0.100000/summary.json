@@ -1,0 +1,14 @@
+{
+  "alpha": 0.1,
+  "best_cost": 0.48193441687200866,
+  "best_fidelity": 0.9670552623344918,
+  "best_horizon_ns": 70.0,
+  "best_leakage": 0.0009993682617543936,
+  "control_plan": "runs/adam_runtime_sweep\\gamma_1.570796\\alpha_0.100000\\best_control_plan.npz",
+  "gamma": 1.5707963267948966,
+  "robustness_path": "runs/adam_runtime_sweep\\gamma_1.570796\\alpha_0.100000\\robustness\\best_robustness.json",
+  "robustness_sigma_1p0_average_fidelity": 0.9536479221770634,
+  "robustness_sigma_1p0_average_gate_fidelity": 0.9420599027213294,
+  "robustness_sigma_1p0_fidelity_variance": 0.00020837704317143996,
+  "runtime_ns": 70.0
+}

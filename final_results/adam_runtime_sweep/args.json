@@ -1,0 +1,23 @@
+{
+  "gammas": "pi/2",
+  "alpha_start": "0.0",
+  "alpha_stop": "pi",
+  "alpha_step": 0.1,
+  "dt_ns": 2.0,
+  "max_time_ns": 180.0,
+  "runtime_norm_ns": 60.0,
+  "termination_cost": 0.2,
+  "lr": 0.03,
+  "adam_iters": 400,
+  "horizons_ns": "40,50,60,70,80,90,100,110,120,130,140,150,160,170,180",
+  "train_noise_std": 1.0,
+  "train_noise_samples": 1,
+  "seed": 2,
+  "cost_chi": 10.0,
+  "cost_beta": 10.0,
+  "cost_mu": 0.2,
+  "cost_kappa": 0.1,
+  "robustness_sigmas": "1.0",
+  "robustness_samples": 60,
+  "out": "runs/adam_runtime_sweep"
+}

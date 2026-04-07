@@ -1,0 +1,24 @@
+{
+  "alpha": 2.2,
+  "best_ckpt_path": "runs\\nominal_clean\\best_agent.pt",
+  "best_eval_cost": 0.29820038449467157,
+  "best_eval_fidelity": 0.9941508785718656,
+  "best_eval_leakage": 0.0015994941234007281,
+  "best_eval_min_cost": 0.29820038449467157,
+  "best_eval_min_cost_time_ns": 116.0,
+  "best_eval_time_ns": 116.0,
+  "best_plan_path": "runs\\nominal_clean\\best_control_plan.npz",
+  "episodes_per_batch": 5000,
+  "final_ckpt_path": "runs\\nominal_clean\\final_agent.pt",
+  "final_plan_path": "runs\\nominal_clean\\final_control_plan.npz",
+  "gamma": 1.5707963267948966,
+  "init_checkpoint": "runs\\nominal_clean\\checkpoints\\iter_000102.pt",
+  "init_checkpoint_iteration": 102,
+  "iterations": 115,
+  "last_robustness_path": "runs\\nominal_clean\\robustness\\iter_000115_robustness.json",
+  "noise_optimized": false,
+  "robustness_samples": 60,
+  "robustness_sigmas": [
+    1.0
+  ]
+}

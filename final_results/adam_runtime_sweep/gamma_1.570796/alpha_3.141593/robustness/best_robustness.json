@@ -1,0 +1,14 @@
+{
+  "alpha": 3.141592653589793,
+  "best_horizon_ns": 70.0,
+  "gamma": 1.5707963267948966,
+  "robustness": {
+    "sigma_1p0": {
+      "average_fidelity": 0.9355803259121395,
+      "average_gate_fidelity": 0.9194754073901744,
+      "fidelity_variance": 0.00040925860010669157,
+      "num_samples": 60,
+      "sigma_mhz": 1.0
+    }
+  }
+}

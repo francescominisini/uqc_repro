@@ -1,0 +1,16 @@
+{
+  "alpha": 1.099,
+  "best_checkpoint": "runs\\runtime\\gamma_1.570796\\alpha_1.099000\\best_agent.pt",
+  "best_cost": 0.39860658672745075,
+  "best_fidelity": 0.984966683008121,
+  "best_leakage": 0.002744836019196793,
+  "best_min_cost": 0.39860658672745075,
+  "best_min_cost_time_ns": 76.0,
+  "control_plan": "runs\\runtime\\gamma_1.570796\\alpha_1.099000\\best_control_plan.npz",
+  "curriculum_checkpoint": "runs\\runtime\\gamma_1.570796\\curriculum_checkpoints\\after_alpha_1.099000.pt",
+  "gamma": 1.5707963267948966,
+  "iterations_used": 10.0,
+  "last_checkpoint": "runs\\runtime\\gamma_1.570796\\alpha_1.099000\\last_agent.pt",
+  "runtime_ns": 76.0,
+  "train_avg_fidelity": 0.8418234131204035
+}

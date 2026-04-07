@@ -1,0 +1,23 @@
+{
+  "alpha": 2.2,
+  "best_ckpt_path": "runs\\cost_function_sweep\\trpo\\a-2p2_67401cca\\seed_1\\best_agent.pt",
+  "best_eval_cost": 0.6754052943665858,
+  "best_eval_fidelity": 0.9647592606132246,
+  "best_eval_leakage": 0.0002809681045534559,
+  "best_eval_min_cost": 0.6754052943665858,
+  "best_eval_min_cost_time_ns": 180.0,
+  "best_eval_time_ns": 180.0,
+  "best_plan_path": "runs\\cost_function_sweep\\trpo\\a-2p2_67401cca\\seed_1\\best_control_plan.npz",
+  "episodes_per_batch": 10000,
+  "final_ckpt_path": "runs\\cost_function_sweep\\trpo\\a-2p2_67401cca\\seed_1\\final_agent.pt",
+  "final_plan_path": "runs\\cost_function_sweep\\trpo\\a-2p2_67401cca\\seed_1\\final_control_plan.npz",
+  "gamma": 1.5707963267948966,
+  "init_checkpoint": null,
+  "iterations": 5,
+  "last_robustness_path": "runs\\cost_function_sweep\\trpo\\a-2p2_67401cca\\seed_1\\robustness\\iter_000005_robustness.json",
+  "noise_optimized": true,
+  "robustness_samples": 60,
+  "robustness_sigmas": [
+    1.0
+  ]
+}

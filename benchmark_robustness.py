@@ -296,7 +296,7 @@ def main() -> None:
         
         # Panel B: Fidelity Variance
         ax2.set_ylabel("Fidelity Variance", fontsize=12)
-        ax2.set_xlabel("Noise Std Dev $\sigma$ (MHz)", fontsize=12)
+        ax2.set_xlabel(r"Noise Std Dev $\sigma$ (MHz)", fontsize=12)
         ax2.set_title("Panel B: Fidelity Variance vs Noise Strength", fontsize=14)
         ax2.grid(True, linestyle='--', alpha=0.7)
         ax2.legend()

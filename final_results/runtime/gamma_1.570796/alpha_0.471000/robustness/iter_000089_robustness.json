@@ -1,0 +1,19 @@
+{
+  "alpha": 0.471,
+  "eval_cost": 1.0428924173954426,
+  "eval_fidelity": 0.9509502068698221,
+  "eval_leakage": 0.0047728581014698105,
+  "eval_plan_path": "runs\\runtime\\gamma_1.570796\\alpha_0.471000\\plans\\iter_000089_control_plan.npz",
+  "eval_time_ns": 180.0,
+  "gamma": 1.5707963267948966,
+  "phase_iter": 89,
+  "robustness": {
+    "sigma_1p0": {
+      "average_fidelity": 0.9130544857539967,
+      "average_gate_fidelity": 0.8913181071924956,
+      "fidelity_variance": 0.0019345072493640943,
+      "num_samples": 60,
+      "sigma_mhz": 1.0
+    }
+  }
+}

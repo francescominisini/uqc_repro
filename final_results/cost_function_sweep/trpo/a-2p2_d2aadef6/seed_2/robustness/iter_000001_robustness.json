@@ -1,0 +1,19 @@
+{
+  "alpha": 2.2,
+  "eval_cost": 5.326447824010799,
+  "eval_fidelity": 0.7697522457622101,
+  "eval_leakage": 9.676254547333187e-05,
+  "eval_plan_path": "runs\\cost_function_sweep\\trpo\\a-2p2_d2aadef6\\seed_2\\plans\\iter_000001_control_plan.npz",
+  "eval_time_ns": 180.0,
+  "gamma": 1.5707963267948966,
+  "iteration": 1,
+  "robustness": {
+    "sigma_1p0": {
+      "average_fidelity": 0.7830689675015711,
+      "average_gate_fidelity": 0.7288362093769639,
+      "fidelity_variance": 0.0031406576594949997,
+      "num_samples": 60,
+      "sigma_mhz": 1.0
+    }
+  }
+}

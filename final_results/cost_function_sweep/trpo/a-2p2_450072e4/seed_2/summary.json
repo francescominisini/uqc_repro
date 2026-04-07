@@ -1,0 +1,23 @@
+{
+  "alpha": 2.2,
+  "best_ckpt_path": "runs\\cost_function_sweep\\trpo\\a-2p2__g-pi_2__kl-0p005__tc-0p15__std-m1p0__dt-2p0__mt-180p0__chi-20p0__beta-10p0__mu-0p1__kappa-0p05\\seed_2\\best_agent.pt",
+  "best_eval_cost": 0.3401112011435582,
+  "best_eval_fidelity": 0.9924829022521424,
+  "best_eval_leakage": 0.00020367756468789668,
+  "best_eval_min_cost": 0.2633030198989437,
+  "best_eval_min_cost_time_ns": 162.0,
+  "best_eval_time_ns": 180.0,
+  "best_plan_path": "runs\\cost_function_sweep\\trpo\\a-2p2__g-pi_2__kl-0p005__tc-0p15__std-m1p0__dt-2p0__mt-180p0__chi-20p0__beta-10p0__mu-0p1__kappa-0p05\\seed_2\\best_control_plan.npz",
+  "episodes_per_batch": 10000,
+  "final_ckpt_path": "runs\\cost_function_sweep\\trpo\\a-2p2__g-pi_2__kl-0p005__tc-0p15__std-m1p0__dt-2p0__mt-180p0__chi-20p0__beta-10p0__mu-0p1__kappa-0p05\\seed_2\\final_agent.pt",
+  "final_plan_path": "runs\\cost_function_sweep\\trpo\\a-2p2__g-pi_2__kl-0p005__tc-0p15__std-m1p0__dt-2p0__mt-180p0__chi-20p0__beta-10p0__mu-0p1__kappa-0p05\\seed_2\\final_control_plan.npz",
+  "gamma": 1.5707963267948966,
+  "init_checkpoint": null,
+  "iterations": 5,
+  "last_robustness_path": "runs\\cost_function_sweep\\trpo\\a-2p2__g-pi_2__kl-0p005__tc-0p15__std-m1p0__dt-2p0__mt-180p0__chi-20p0__beta-10p0__mu-0p1__kappa-0p05\\seed_2\\robustness\\iter_000005_robustness.json",
+  "noise_optimized": true,
+  "robustness_samples": 60,
+  "robustness_sigmas": [
+    1.0
+  ]
+}
