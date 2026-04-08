@@ -8,6 +8,7 @@ from typing import Dict, List, Any, Optional, Tuple
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
+import pandas as pd
 
 from uqc.env import EnvConfig, QuantumControlEnv
 from uqc.eval import ControlPlan, robustness_metrics, simulate_nominal_plan
@@ -185,6 +186,9 @@ def main() -> None:
     parser.add_argument("--samples", type=int, default=60, help="Monte Carlo samples per noise level.")
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--plot", action="store_true", help="Generate comparison plots (Figure 4).")
+    parser.add_argument("--plot-only", action="store_true", help="Skip simulation and only generate plots from existing CSVs.")
+    parser.add_argument("--ewma-span", type=int, default=None, help="Span for EWMA smoothing (e.g. 5-10).")
+    parser.add_argument("--show-sigma-band", action="store_true", help="Show sigma band (std dev from MC samples) around the curve.")
     args = parser.parse_args()
 
     if args.labels and len(args.labels) != len(args.inputs):
@@ -209,6 +213,16 @@ def main() -> None:
     
     for plan, label, meta in resolved_plans:
         method_out_dir = os.path.join(args.out, label)
+        
+        if args.plot_only:
+            # Check if CSV exists before skipping
+            csv_path = os.path.join(method_out_dir, "robustness_curve.csv")
+            if os.path.exists(csv_path):
+                print(f"Skipping evaluation for '{label}', using existing results.")
+                continue
+            else:
+                print(f"Warning: --plot-only set but {csv_path} not found. Running evaluation.")
+
         ensure_dir(method_out_dir)
         print(f"\nEvaluating '{label}' -> {method_out_dir}")
         print(f"Source: {meta['source_path']} ({meta['input_type']})")
@@ -284,9 +298,33 @@ def main() -> None:
             # Handle single row case
             if data.size == 1:
                 data = np.array([data])
+            
+            x = data['sigma_mhz']
+            y1 = data['average_fidelity']
+            y2 = data['fidelity_variance']
+            
+            if args.ewma_span:
+                y1_plot = pd.Series(y1).ewm(span=args.ewma_span).mean().values
+                y2_plot = pd.Series(y2).ewm(span=args.ewma_span).mean().values
+                line_label = f"{label} (EWMA-{args.ewma_span})"
+            else:
+                y1_plot = y1
+                y2_plot = y2
+                line_label = label
+
+            # Fidelity Plot
+            ax1.plot(x, y1_plot, label=line_label, color=color, linewidth=2)
+            
+            if args.show_sigma_band:
+                # Sigma is sqrt of variance
+                sigmas = np.sqrt(y2)
+                if args.ewma_span:
+                    sigmas = pd.Series(sigmas).ewm(span=args.ewma_span).mean().values
                 
-            ax1.plot(data['sigma_mhz'], data['average_fidelity'], label=label, color=color, linewidth=2)
-            ax2.plot(data['sigma_mhz'], data['fidelity_variance'], label=label, color=color, linewidth=2)
+                ax1.fill_between(x, y1_plot - sigmas, y1_plot + sigmas, color=color, alpha=0.2)
+
+            # Variance Plot
+            ax2.plot(x, y2_plot, label=line_label, color=color, linewidth=2)
 
         # Panel A: Average Fidelity
         ax1.set_ylabel("Average Fidelity", fontsize=12)
@@ -296,7 +334,7 @@ def main() -> None:
         
         # Panel B: Fidelity Variance
         ax2.set_ylabel("Fidelity Variance", fontsize=12)
-        ax2.set_xlabel("Noise Std Dev $\sigma$ (MHz)", fontsize=12)
+        ax2.set_xlabel(r"Noise Std Dev $\sigma$ (MHz)", fontsize=12)
         ax2.set_title("Panel B: Fidelity Variance vs Noise Strength", fontsize=14)
         ax2.grid(True, linestyle='--', alpha=0.7)
         ax2.legend()
