@@ -178,6 +178,8 @@ def main() -> None:
                         help="List of labels matching --inputs. If omitted, derives from paths.")
     parser.add_argument("--out", type=str, required=True, 
                         help="Output directory where each method gets its own subfolder.")
+    parser.add_argument("--plot-name", type=str, default="robustness_comparison.png",
+                        help="Filename for the generated comparison plot.")
     parser.add_argument("--noise-min", type=float, default=0.1)
     parser.add_argument("--noise-max", type=float, default=3.5)
     parser.add_argument("--noise-step", type=float, default=0.1)
@@ -187,8 +189,10 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--plot", action="store_true", help="Generate comparison plots (Figure 4).")
     parser.add_argument("--plot-only", action="store_true", help="Skip simulation and only generate plots from existing CSVs.")
-    parser.add_argument("--ewma-span", type=int, default=None, help="Span for EWMA smoothing (e.g. 5-10).")
-    parser.add_argument("--show-sigma-band", action="store_true", help="Show sigma band (std dev from MC samples) around the curve.")
+    parser.add_argument("--ewma-span", type=int, default=None, help="Default span for EWMA smoothing.")
+    parser.add_argument("--ewma-span-fid", type=int, default=None, help="Span for Average Fidelity smoothing (overrides --ewma-span).")
+    parser.add_argument("--ewma-span-var", type=int, default=None, help="Span for Fidelity Variance smoothing (overrides --ewma-span).")
+    parser.add_argument("--show-sigma-band", action="store_true", help="Show sigma band around curves.")
     args = parser.parse_args()
 
     if args.labels and len(args.labels) != len(args.inputs):
@@ -303,28 +307,47 @@ def main() -> None:
             y1 = data['average_fidelity']
             y2 = data['fidelity_variance']
             
-            if args.ewma_span:
-                y1_plot = pd.Series(y1).ewm(span=args.ewma_span).mean().values
-                y2_plot = pd.Series(y2).ewm(span=args.ewma_span).mean().values
-                line_label = f"{label} (EWMA-{args.ewma_span})"
+            # Decouple EWMA spans
+            span_fid = args.ewma_span_fid if args.ewma_span_fid is not None else args.ewma_span
+            span_var = args.ewma_span_var if args.ewma_span_var is not None else args.ewma_span
+
+            if span_fid:
+                y1_plot = pd.Series(y1).ewm(span=span_fid).mean().values
+                fid_label = f"{label} (EWMA-{span_fid})"
             else:
                 y1_plot = y1
+                fid_label = label
+
+            if span_var:
+                y2_plot = pd.Series(y2).ewm(span=span_var).mean().values
+                var_label = f"{label} (EWMA-{span_var})"
+            else:
                 y2_plot = y2
-                line_label = label
+                var_label = label
 
             # Fidelity Plot
-            ax1.plot(x, y1_plot, label=line_label, color=color, linewidth=2)
+            ax1.plot(x, y1_plot, label=fid_label, color=color, linewidth=2)
             
-            if args.show_sigma_band:
-                # Sigma is sqrt of variance
-                sigmas = np.sqrt(y2)
-                if args.ewma_span:
-                    sigmas = pd.Series(sigmas).ewm(span=args.ewma_span).mean().values
-                
-                ax1.fill_between(x, y1_plot - sigmas, y1_plot + sigmas, color=color, alpha=0.2)
-
             # Variance Plot
-            ax2.plot(x, y2_plot, label=line_label, color=color, linewidth=2)
+            ax2.plot(x, y2_plot, label=var_label, color=color, linewidth=2)
+
+            if args.show_sigma_band:
+                # Panel A: Fidelity Sigma Band (Standard Deviation)
+                sigmas1 = np.sqrt(y2)
+                if span_fid:
+                    sigmas1 = pd.Series(sigmas1).ewm(span=span_fid).mean().values
+                ax1.fill_between(x, y1_plot - sigmas1, y1_plot + sigmas1, color=color, alpha=0.1)
+                
+                # Panel B: Variance Sigma Band (Local Fluctuation Intensity)
+                # Instead of theoretical SE, we use rolling standard deviation to show the 'jitters' in variance
+                roll_window = span_var if span_var else 10
+                sigmas2 = pd.Series(y2).rolling(window=roll_window, center=True).std().fillna(method='bfill').fillna(method='ffill').values
+                if span_var:
+                    sigmas2 = pd.Series(sigmas2).ewm(span=span_var).mean().values
+                
+                # Ensure band doesn't go below zero
+                lower_band = np.maximum(0, y2_plot - sigmas2)
+                ax2.fill_between(x, lower_band, y2_plot + sigmas2, color=color, alpha=0.1)
 
         # Panel A: Average Fidelity
         ax1.set_ylabel("Average Fidelity", fontsize=12)
@@ -340,7 +363,8 @@ def main() -> None:
         ax2.legend()
         
         plt.tight_layout()
-        plot_path = os.path.join(args.out, "robustness_comparison.png")
+        plot_name = args.plot_name if args.plot_name.endswith(".png") else args.plot_name + ".png"
+        plot_path = os.path.join(args.out, plot_name)
         plt.savefig(plot_path, dpi=300)
         print(f"Plots saved to {plot_path}")
 
