@@ -190,8 +190,8 @@ def main() -> None:
     parser.add_argument("--plot", action="store_true", help="Generate comparison plots (Figure 4).")
     parser.add_argument("--plot-only", action="store_true", help="Skip simulation and only generate plots from existing CSVs.")
     parser.add_argument("--ewma-span", type=int, default=None, help="Default span for EWMA smoothing.")
-    parser.add_argument("--ewma-span-fid", type=int, default=None, help="Span for Average Fidelity smoothing (overrides --ewma-span).")
-    parser.add_argument("--ewma-span-var", type=int, default=None, help="Span for Fidelity Variance smoothing (overrides --ewma-span).")
+    parser.add_argument("--ewma-span-fid", type=int, default=50, help="Span for Average Fidelity smoothing (overrides --ewma-span).")
+    parser.add_argument("--ewma-span-var", type=int, default=80, help="Span for Fidelity Variance smoothing (overrides --ewma-span).")
     parser.add_argument("--show-sigma-band", action="store_true", help="Show sigma band around curves.")
     args = parser.parse_args()
 
@@ -212,8 +212,16 @@ def main() -> None:
 
     set_seeds(args.seed)
 
-    print("Resolving inputs...")
-    resolved_plans = parse_and_resolve_inputs(args.inputs, args.labels)
+    if args.plot_only:
+        # If we only want to plot, we can just use the labels to find CSVs in args.out
+        if args.labels:
+            labels = args.labels
+        else:
+            labels = [format_label_from_path(p) for p in args.inputs]
+        resolved_plans = [(None, label, {"source_path": "N/A", "input_type": "existing_csv", "num_steps": 0}) for label in labels]
+    else:
+        print("Resolving inputs...")
+        resolved_plans = parse_and_resolve_inputs(args.inputs, args.labels)
     
     for plan, label, meta in resolved_plans:
         method_out_dir = os.path.join(args.out, label)
