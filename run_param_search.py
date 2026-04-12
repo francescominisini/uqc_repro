@@ -341,11 +341,11 @@ def main() -> None:
     parser.add_argument("--train-noise-std", type=float, default=1.0)
     parser.add_argument("--trpo-iterations", type=int, default=30)
     parser.add_argument("--trpo-episodes-per-batch", type=int, default=2000)
-    parser.add_argument("--max-kls", type=str, default="0.005,0.01,0.02")
-    parser.add_argument("--termination-costs", type=str, default="0.10,0.15,0.20")
-    parser.add_argument("--init-log-stds", type=str, default="-1.0,-0.5,0.0")
+    parser.add_argument("--max-kls", type=str, default="0.01")
+    parser.add_argument("--termination-costs", type=str, default="0.4")
+    parser.add_argument("--init-log-stds", type=str, default="-1.0")
     parser.add_argument("--dt-values", type=str, default="2.0")
-    parser.add_argument("--max-time-values", type=str, default="600.0")
+    parser.add_argument("--max-time-values", type=str, default="180.0")
     parser.add_argument("--hidden-sizes-list", type=str, default="64-32-32", help="Comma separated formats like 32-32-32,64-64-64")
 
     # Adam search space
@@ -371,71 +371,93 @@ def main() -> None:
     raw_rows: List[Dict[str, Any]] = []
     seen_runs = set()
 
-    for cfg_idx, cfg in enumerate(configs, start=1):
+    # Pre-check jobs
+    planned_jobs = []
+    for cfg in configs:
         cfg_name = config_to_name(cfg, config_keys)
         for seed in seeds:
-            if (cfg_name, seed) in seen_runs:
-                continue
-            seen_runs.add((cfg_name, seed))
-            
-            run_dir = out_root / args.mode / cfg_name / f"seed_{seed}"
-            ensure_dir(run_dir)
-            summary_path = run_dir / "summary.json"
+            planned_jobs.append((cfg, cfg_name, seed))
 
-            if summary_path.exists() and not args.force:
-                print(f"[skip] {summary_path} already exists", flush=True)
+    to_run = []
+    total_skipped = 0
+    for cfg, cfg_name, seed in planned_jobs:
+        run_dir = out_root / args.mode / cfg_name / f"seed_{seed}"
+        summary_path = run_dir / "summary.json"
+        if summary_path.exists() and not args.force:
+            total_skipped += 1
+        else:
+            to_run.append((cfg, cfg_name, seed, run_dir))
+
+    print(f"\n=== PARAMETER SEARCH SUMMARY ===")
+    print(f"Total configurations: {len(configs)}")
+    print(f"Seeds: {seeds}")
+    print(f"Total runs: {len(planned_jobs)}")
+    print(f"Already completed: {total_skipped}")
+    print(f"Remaining to run: {len(to_run)}")
+    print("================================\n")
+
+    for cfg_idx, (cfg, cfg_name, seed, run_dir) in enumerate(to_run, start=1):
+        if args.mode == "trpo":
+            if (run_dir / "args.json").exists() and not args.force:
+                print(f"[resume] Resuming interrupted run at {run_dir}", flush=True)
+                cmd = [
+                    sys.executable,
+                    str(root / "train_trpo_single_target.py"),
+                    "--resume", str(run_dir)
+                ]
             else:
-                if args.mode == "trpo":
-                    if (run_dir / "args.json").exists() and not args.force:
-                        print(f"[resume] Resuming interrupted run at {run_dir}", flush=True)
-                        cmd = [
-                            sys.executable,
-                            str(root / "train_trpo_single_target.py"),
-                            "--resume", str(run_dir)
-                        ]
-                    else:
-                        cmd = build_trpo_command(
-                            python_exec=sys.executable,
-                            root=root,
-                            out_dir=run_dir,
-                            cfg=cfg,
-                            seed=seed,
-                            args=args,
-                        )
-                else:
-                    cmd = build_adam_command(
-                        python_exec=sys.executable,
-                        root=root,
-                        out_dir=run_dir,
-                        cfg=cfg,
-                        seed=seed,
-                        args=args,
-                    )
-                run_cmd(cmd)
+                cmd = build_trpo_command(
+                    python_exec=sys.executable,
+                    root=root,
+                    out_dir=run_dir,
+                    cfg=cfg,
+                    seed=seed,
+                    args=args,
+                )
+        else:
+            cmd = build_adam_command(
+                python_exec=sys.executable,
+                root=root,
+                out_dir=run_dir,
+                cfg=cfg,
+                seed=seed,
+                args=args,
+            )
+        run_cmd(cmd)
 
-            if not summary_path.exists():
-                print(f"[warn] Missing summary.json for {run_dir}", flush=True)
-                continue
-
+        summary_path = run_dir / "summary.json"
+        if summary_path.exists():
             summary = read_json(summary_path)
-            row: Dict[str, Any] = {
-                "mode": args.mode,
-                "config_id": cfg_name,
-                "seed": seed,
-                "run_dir": str(run_dir),
-            }
-            row.update(cfg)
-            row.update(extract_metrics(args.mode, summary))
-            raw_rows.append(row)
-
+            metrics = extract_metrics(args.mode, summary)
             print(
-                f"[done] {cfg_idx}/{len(configs)} | seed={seed} | "
-                f"config={cfg_name} | primary={row['primary_metric']}",
+                f"[done] {cfg_idx}/{len(to_run)} | seed={seed} | "
+                f"config={cfg_name} | primary={metrics['primary_metric']}",
                 flush=True,
             )
+        else:
+            print(f"[error] Job failed to produce summary.json at {run_dir}", flush=True)
+
+    # Re-scan ALL completed jobs for the final report
+    final_rows: List[Dict[str, Any]] = []
+    for cfg in configs:
+        cfg_name = config_to_name(cfg, config_keys)
+        for seed in seeds:
+            run_dir = out_root / args.mode / cfg_name / f"seed_{seed}"
+            summary_path = run_dir / "summary.json"
+            if summary_path.exists():
+                summary = read_json(summary_path)
+                row: Dict[str, Any] = {
+                    "mode": args.mode,
+                    "config_id": cfg_name,
+                    "seed": seed,
+                    "run_dir": str(run_dir),
+                }
+                row.update(cfg)
+                row.update(extract_metrics(args.mode, summary))
+                final_rows.append(row)
 
     raw_csv = out_root / f"{args.mode}_raw_results.csv"
-    write_csv(raw_csv, raw_rows)
+    write_csv(raw_csv, final_rows)
 
     if args.mode == "trpo":
         metric_keys = [
@@ -457,7 +479,7 @@ def main() -> None:
         primary_metric_name = "primary_metric"
 
     aggregated = aggregate_rows(
-        rows=raw_rows,
+        rows=final_rows,
         group_keys=["mode", "config_id"] + config_keys,
         metric_keys=metric_keys,
     )
@@ -473,7 +495,7 @@ def main() -> None:
     manifest = {
         "mode": args.mode,
         "num_configs": len(configs),
-        "num_runs": len(raw_rows),
+        "num_runs": len(final_rows),
         "raw_results_csv": str(raw_csv),
         "aggregated_results_csv": str(agg_csv),
         "best_config_json": str(best_json),

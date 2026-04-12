@@ -2,7 +2,7 @@
   "aggregated_results_csv": "runs\\nn_size_sweep\\trpo_aggregated_results.csv",
   "best_config_json": "runs\\nn_size_sweep\\trpo_best_config.json",
   "mode": "trpo",
-  "num_configs": 4,
-  "num_runs": 12,
+  "num_configs": 5,
+  "num_runs": 15,
   "raw_results_csv": "runs\\nn_size_sweep\\trpo_raw_results.csv"
 }
